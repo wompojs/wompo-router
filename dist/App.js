@@ -1,343 +1,626 @@
 (() => {
   // ../womp/dist/womp.js
-  var D = null;
-  var N = 0;
-  var _ = "$wc$";
-  var T = "wc-wc";
-  var V = /<\/?$/g;
-  var P = /\s+([^\s]*?)="?$/g;
-  var I = /(<([a-z]*?-[a-z]*).*?)\/>/g;
-  var W = /<(?<tag>script|style|textarea|title])(?!.*?<\/\k<tag>)/gi;
-  var L = /^(?:script|style|textarea|title)$/i;
-  var w = 0;
-  var v = 1;
-  var R = 2;
-  var S = typeof global < "u";
-  var A = S ? { createTreeWalker() {
+  var DEV_MODE = false;
+  var currentRenderingComponent = null;
+  var currentHookIndex = 0;
+  var WC_MARKER = "$wc$";
+  var DYNAMIC_TAG_MARKER = "wc-wc";
+  var isDynamicTagRegex = /<\/?$/g;
+  var isAttrRegex = /\s+([^\s]*?)="?$/g;
+  var selfClosingRegex = /(<([a-z]*?-[a-z]*).*?)\/>/g;
+  var isInsideTextTag = /<(?<tag>script|style|textarea|title])(?!.*?<\/\k<tag>)/gi;
+  var onlyTextChildrenElementsRegex = /^(?:script|style|textarea|title)$/i;
+  var NODE = 0;
+  var ATTR = 1;
+  var TAG = 2;
+  var IS_SERVER = typeof global !== "undefined";
+  var doc = IS_SERVER ? { createTreeWalker() {
   } } : document;
-  var k = A.createTreeWalker(A, 129);
-  var F = class {
-    constructor(e, n) {
-      this.template = e, this.dependencies = n;
+  var treeWalker = doc.createTreeWalker(
+    doc,
+    129
+    // NodeFilter.SHOW_{ELEMENT|COMMENT}
+  );
+  var CachedTemplate = class {
+    /**
+     * Create a new CachedTemplate instance.
+     * @param template The HTML Template already elaborated to handle the dynamic parts.
+     * @param dependencies The metadata dependencies for the template.
+     */
+    constructor(template, dependencies, stringified) {
+      this.template = template;
+      this.dependencies = dependencies;
+      this.stringified = stringified;
     }
+    /**
+     * This function will clone the template content and build the dynamcis metadata - an array
+     * containing all the information to efficiently put values in the DOM, without checking if each
+     * node is equal to a virtual one. The DOM update is not done through this function, but thanks to
+     * the `__setValues` function.
+     * @returns An array containing 2 values: The DOM fragment cloned from the content of the
+     * template, and the dynamics metadata.
+     */
     clone() {
-      const e = this.template.content, n = this.dependencies, s = document.importNode(e, true);
-      k.currentNode = s;
-      let t = k.nextNode(), a = 0, i = 0, r = n[0];
-      const c2 = [];
-      for (; r !== void 0; ) {
-        if (a === r.index) {
-          let l;
-          const d = r.type;
-          d === w ? l = new O(t, t.nextSibling) : d === v ? l = new j(t, r) : d === R && (l = new q(t)), c2.push(l), r = n[++i];
+      const content = this.template.content;
+      const dependencies = this.dependencies;
+      const fragment = document.importNode(content, true);
+      treeWalker.currentNode = fragment;
+      let node = treeWalker.nextNode();
+      let nodeIndex = 0;
+      let dynamicIndex = 0;
+      let templateDependency = dependencies[0];
+      const dynamics = [];
+      while (templateDependency !== void 0) {
+        if (nodeIndex === templateDependency.index) {
+          let dynamic;
+          const type = templateDependency.type;
+          if (type === NODE) {
+            dynamic = new DynamicNode(node, node.nextSibling);
+          } else if (type === ATTR) {
+            dynamic = new DynamicAttribute(node, templateDependency);
+          } else if (type === TAG) {
+            dynamic = new DynamicTag(node);
+          }
+          dynamics.push(dynamic);
+          templateDependency = dependencies[++dynamicIndex];
         }
-        a !== r?.index && (t = k.nextNode(), a++);
+        if (nodeIndex !== templateDependency?.index) {
+          node = treeWalker.nextNode();
+          nodeIndex++;
+        }
       }
-      return k.currentNode = document, [s, c2];
+      treeWalker.currentNode = document;
+      return [fragment, dynamics];
     }
   };
-  var z = class {
-    constructor(e, n, s) {
-      this.stringifiedTemplate = e, this.values = n, this.template = s;
+  var HtmlProcessedValue = class {
+    constructor(stringifiedTemplate, values, template) {
+      this.stringifiedTemplate = stringifiedTemplate;
+      this.values = values;
+      this.template = template;
     }
   };
-  var O = class {
-    constructor(e, n) {
+  var DynamicNode = class {
+    // For faster access
+    /**
+     * Creates a new DynamicNode instance.
+     * @param startNode The start node.
+     * @param endNode The end node.
+     */
+    constructor(startNode, endNode) {
       this.isNode = true;
       this.isAttr = false;
       this.isTag = false;
-      this.startNode = e, this.endNode = n;
+      this.startNode = startNode;
+      this.endNode = endNode;
     }
+    /**
+     * Removes all the nodes between the start and the end nodes.
+     */
     clearValue() {
-      let e = this.startNode.nextSibling;
-      for (; e !== this.endNode; )
-        e.remove(), e = this.startNode.nextSibling;
+      let currentNode = this.startNode.nextSibling;
+      while (currentNode !== this.endNode) {
+        currentNode.remove();
+        currentNode = this.startNode.nextSibling;
+      }
     }
+    /**
+     * First removes all the nodes between the start and the end nodes, then it also removes the
+     * start node and the end node.
+     */
     dispose() {
-      this.clearValue(), this.startNode.remove(), this.endNode.remove();
+      this.clearValue();
+      this.startNode.remove();
+      this.endNode.remove();
     }
   };
-  var j = class {
-    constructor(e, n) {
+  var DynamicAttribute = class {
+    /**
+     * Creates a new DynamicAttribute instance.
+     * @param node The node that owns the attribute.
+     * @param dependency The dependency metadata.
+     */
+    constructor(node, dependency) {
       this.isNode = false;
       this.isAttr = true;
       this.isTag = false;
       this.__eventInitialized = false;
-      this.node = e, this.name = n.name, this.attrStructure = n.attrDynamics;
+      this.node = node;
+      this.name = dependency.name;
+      this.attrStructure = dependency.attrDynamics;
     }
-    updateValue(e) {
-      if (this.name === "ref" && e.__wcRef) {
-        if (e.current = this.node, this.node._$womp) {
-          const t = this.node.onDisconnected;
+    /**
+     * Update an attribute value.
+     * @param newValue The new value of the attribute
+     */
+    updateValue(newValue) {
+      if (this.name === "ref" && newValue.__wcRef) {
+        newValue.current = this.node;
+        if (this.node._$womp) {
+          const oldDisconnectedCallback = this.node.onDisconnected;
           this.node.onDisconnected = () => {
-            e.current = null, t();
+            newValue.current = null;
+            oldDisconnectedCallback();
           };
         }
         return;
       }
-      const n = this.node._$womp;
-      n && this.node.updateProps(this.name, e);
-      const s = e !== Object(e);
-      if (e === false)
+      if (DEV_MODE && this.name === "wc-perf")
+        this.node._$measurePerf = true;
+      const isWompElement = this.node._$womp;
+      if (isWompElement)
+        this.node.updateProps(this.name, newValue);
+      const isPrimitive = newValue !== Object(newValue);
+      if (newValue === false)
         this.node.removeAttribute(this.name);
-      else if (s && !this.name.match(/[A-Z]/))
-        this.node.setAttribute(this.name, e);
+      else if (isPrimitive && !this.name.match(/[A-Z]/))
+        this.node.setAttribute(this.name, newValue);
       else if (this.name === "style") {
-        let t = "";
-        const a = Object.keys(e);
-        for (const i of a) {
-          let r = e[i], c2 = i.replace(/[A-Z]/g, (l) => "-" + l.toLowerCase());
-          typeof r == "number" && (r = `${r}px`), t += `${c2}:${r};`;
+        let styleString = "";
+        const styles = Object.keys(newValue);
+        for (const key of styles) {
+          let styleValue = newValue[key];
+          let styleKey = key.replace(/[A-Z]/g, (letter) => "-" + letter.toLowerCase());
+          if (typeof styleValue === "number")
+            styleValue = `${styleValue}px`;
+          styleString += `${styleKey}:${styleValue};`;
         }
-        this.node.setAttribute(this.name, t);
+        this.node.setAttribute(this.name, styleString);
       }
-      this.name === "title" && n && this.node.removeAttribute(this.name);
+      if (this.name === "title" && isWompElement)
+        this.node.removeAttribute(this.name);
     }
-    set callback(e) {
+    /**
+     * Set the callback function to be executed when an event is fired. If the event has not been
+     * initialized, the event listener will be added.
+     */
+    set callback(callback) {
       if (!this.__eventInitialized) {
-        const n = this.name.substring(1);
-        this.node.addEventListener(n, this.__listener.bind(this)), this.__eventInitialized = true;
+        const eventName = this.name.substring(1);
+        this.node.addEventListener(eventName, this.__listener.bind(this));
+        this.__eventInitialized = true;
       }
-      this.__callback = e;
+      this.__callback = callback;
     }
-    __listener(e) {
-      this.__callback && this.__callback(e);
+    /**
+     * The listener that will execute the __callback function (if defined).
+     * @param event The event object
+     */
+    __listener(event) {
+      if (this.__callback)
+        this.__callback(event);
     }
   };
-  var q = class {
-    constructor(e) {
+  var DynamicTag = class {
+    // For faster access
+    /**
+     * Creates a new DynamicTag instance.
+     * @param node The node instance.
+     */
+    constructor(node) {
       this.isNode = false;
       this.isAttr = false;
       this.isTag = true;
-      this.node = e;
+      this.node = node;
     }
   };
-  var G = class {
-    constructor(e) {
+  var WompChildren = class {
+    constructor(nodes) {
       this._$wompChildren = true;
-      this.nodes = e;
+      this.nodes = nodes;
     }
   };
-  var U = class {
-    constructor(e, n) {
+  var WompArrayDependency = class {
+    /**
+     * Creates a new WompArrayDependency instance.
+     * @param values The array of values to put in the DOM
+     * @param dependency The dynamic node dependency on which the array should be rendered.
+     */
+    constructor(values, dependency) {
       this.isArrayDependency = true;
-      this.dynamics = [], this.__parentDependency = n, this.addDependenciesFrom(n.startNode, e.length), this.__oldValues = E(this.dynamics, e, []);
+      this.dynamics = [];
+      this.__parentDependency = dependency;
+      this.addDependenciesFrom(dependency.startNode, values.length);
+      this.__oldValues = __setValues(this.dynamics, values, []);
     }
-    addDependenciesFrom(e, n) {
-      let s = e, t = n;
-      for (; t; ) {
-        const a = document.createComment("?START"), i = document.createComment("?END");
-        s.after(a), a.after(i);
-        const r = new O(a, i);
-        s = i, this.dynamics.push(r), t--;
+    /**
+     * This function will add markers (HTML comments) and generate dynamic nodes dependecies used to
+     * efficiently udpate the values inside of the array.
+     * @param startNode The start node on which insert the new "single-item" dependencies.
+     * @param toAdd The number of dependencies to generate.
+     */
+    addDependenciesFrom(startNode, toAdd) {
+      let currentNode = startNode;
+      let toAddNumber = toAdd;
+      while (toAddNumber) {
+        const startComment = document.createComment(`?START`);
+        const endComment = document.createComment(`?END`);
+        currentNode.after(startComment);
+        startComment.after(endComment);
+        const dependency = new DynamicNode(startComment, endComment);
+        currentNode = endComment;
+        this.dynamics.push(dependency);
+        toAddNumber--;
       }
     }
-    checkUpdates(e) {
-      let n = e.length - this.__oldValues.length;
-      if (n > 0) {
-        let s = this.dynamics[this.dynamics.length - 1]?.endNode;
-        s || (s = this.__parentDependency.startNode), this.addDependenciesFrom(s, n);
-      } else if (n < 0)
-        for (; n; )
-          this.dynamics.pop().dispose(), n++;
-      return this.__oldValues = E(this.dynamics, e, this.__oldValues), this;
+    /**
+     * Check if there are dependencies to add/remove, and then set the new values to the old nodes.
+     * Setting the new values will start an eventual recursive check for eventual nested arrays.
+     * @param newValues The new values to check with the old ones fot updates.
+     * @returns This instance.
+     */
+    checkUpdates(newValues) {
+      let diff = newValues.length - this.__oldValues.length;
+      if (diff > 0) {
+        let startNode = this.dynamics[this.dynamics.length - 1]?.endNode;
+        if (!startNode)
+          startNode = this.__parentDependency.startNode;
+        this.addDependenciesFrom(startNode, diff);
+      } else if (diff < 0) {
+        while (diff) {
+          const toClean = this.dynamics.pop();
+          toClean.dispose();
+          diff++;
+        }
+      }
+      this.__oldValues = __setValues(this.dynamics, newValues, this.__oldValues);
+      return this;
     }
   };
-  var B = (o, e) => {
-    const { css: n } = o, { shadow: s, name: t, cssGeneration: a } = e, i = t, r = {};
-    let c2 = n;
-    if (a) {
-      if (n.includes(":host") || (c2 = `${s ? ":host" : i} {display:block;} ${n}`), 0) {
+  var __generateSpecifcStyles = (component, options) => {
+    const { css } = component;
+    const { shadow, name, cssGeneration } = options;
+    const componentName = name;
+    const classes = {};
+    let generatedCss = css;
+    if (DEV_MODE) {
+      if (!shadow && !cssGeneration && !name.startsWith("womp-context-provider"))
+        console.warn(
+          `The component ${name} is not an isolated component (shadow=false) and has the cssGeneration option set to false.
+This can lead to unexpected behaviors, because this component can alter other components' styles.`
+        );
+    }
+    if (cssGeneration) {
+      if (!css.includes(":host"))
+        generatedCss = `${shadow ? ":host" : componentName} {display:block;} ${css}`;
+      if (DEV_MODE) {
+        const invalidSelectors = [];
+        [...generatedCss.matchAll(/.*?}([\s\S]*?){/gm)].forEach((selector) => {
+          const cssSelector = selector[1].trim();
+          if (!cssSelector.includes("."))
+            invalidSelectors.push(cssSelector);
+        });
+        invalidSelectors.forEach((selector) => {
+          console.warn(
+            `The CSS selector "${selector} {...}" in the component "${componentName}" is not enough specific: include at least one class.`
+          );
+        });
       }
-      s || (c2 = c2.replace(/:host/g, i)), c2 = c2.replace(/\.(?!\d)(.*?)[\s|{|,|+|~|>]/gm, (l, d) => {
-        const p = `${i}__${d}`;
-        return r[d] = p, `.${p} `;
+      if (!shadow)
+        generatedCss = generatedCss.replace(/:host/g, componentName);
+      generatedCss = generatedCss.replace(/\.(?!\d)(.*?)[\s|{|,|+|~|>]/gm, (_, className) => {
+        const uniqueClassName = `${componentName}__${className}`;
+        classes[className] = uniqueClassName;
+        return `.${uniqueClassName} `;
       });
     }
-    return [c2, r];
+    return [generatedCss, classes];
   };
-  var K = (o) => {
-    let e = "";
-    const n = [], s = o.length - 1;
-    let t = "", a = "";
-    for (let i = 0; i < s; i++) {
-      let r = o[i];
-      if (t && r.includes(t) && (t = ""), a && new RegExp(`</${a}>`) && (a = ""), t || a)
-        e += r + _;
-      else {
-        P.lastIndex = 0;
-        const c2 = P.exec(r);
-        if (c2) {
-          const [l, d] = c2, p = l[l.length - 1];
-          t = p === '"' || p === "'" ? p : "", r = r.substring(0, r.length - t.length - 1);
-          let m = `${r}${_}=`;
-          t ? m += `${t}${_}` : m += '"0"', e += m, n.push(d);
+  var __createHtml = (parts) => {
+    let html2 = "";
+    const attributes = [];
+    const length = parts.length - 1;
+    let attrDelimiter = "";
+    let textTagName = "";
+    for (let i = 0; i < length; i++) {
+      let part = parts[i];
+      if (attrDelimiter && part.includes(attrDelimiter))
+        attrDelimiter = "";
+      if (textTagName && new RegExp(`</${textTagName}>`))
+        textTagName = "";
+      if (attrDelimiter || textTagName) {
+        html2 += part + WC_MARKER;
+      } else {
+        isAttrRegex.lastIndex = 0;
+        const isAttr = isAttrRegex.exec(part);
+        if (isAttr) {
+          const [match, attrName] = isAttr;
+          const beforeLastChar = match[match.length - 1];
+          attrDelimiter = beforeLastChar === '"' || beforeLastChar === "'" ? beforeLastChar : "";
+          part = part.substring(0, part.length - attrDelimiter.length - 1);
+          let toAdd = `${part}${WC_MARKER}=`;
+          if (attrDelimiter)
+            toAdd += `${attrDelimiter}${WC_MARKER}`;
+          else
+            toAdd += '"0"';
+          html2 += toAdd;
+          attributes.push(attrName);
         } else {
-          if (r.match(V)) {
-            e += r + T;
+          if (part.match(isDynamicTagRegex)) {
+            html2 += part + DYNAMIC_TAG_MARKER;
             continue;
           }
-          W.lastIndex = 0;
-          const l = W.exec(r);
-          l ? (a = l[1], e += r + _) : e += r + `<?${_}>`;
+          isInsideTextTag.lastIndex = 0;
+          const insideTextTag = isInsideTextTag.exec(part);
+          if (insideTextTag) {
+            textTagName = insideTextTag[1];
+            html2 += part + WC_MARKER;
+          } else {
+            html2 += part + `<?${WC_MARKER}>`;
+          }
         }
       }
     }
-    return e += o[o.length - 1], e = e.replace(I, "$1></$2>"), [e, n];
+    html2 += parts[parts.length - 1];
+    html2 = html2.replace(selfClosingRegex, "$1></$2>");
+    return [html2, attributes];
   };
-  var Z = (o, e, n) => {
-    const s = [];
-    k.currentNode = o.content;
-    let t, a = 0, i = 0;
-    const r = e.length;
-    for (; (t = k.nextNode()) !== null && s.length < r; ) {
-      if (t.nodeType === 1) {
-        if (t.nodeName === T.toUpperCase()) {
-          const c2 = { type: R, index: i };
-          s.push(c2);
+  var __createDependencies = (template, parts, attributes) => {
+    const dependencies = [];
+    treeWalker.currentNode = template.content;
+    let node;
+    let dependencyIndex = 0;
+    let nodeIndex = 0;
+    const partsLength = parts.length;
+    while ((node = treeWalker.nextNode()) !== null && dependencies.length < partsLength) {
+      if (node.nodeType === 1) {
+        if (node.nodeName === DYNAMIC_TAG_MARKER.toUpperCase()) {
+          const dependency = {
+            type: TAG,
+            index: nodeIndex
+          };
+          dependencies.push(dependency);
         }
-        if (t.hasAttributes()) {
-          const c2 = t.getAttributeNames();
-          for (const l of c2)
-            if (l.endsWith(_)) {
-              const d = n[a++], p = t.getAttribute(l);
-              if (p !== "0") {
-                const m = p.split(_);
-                for (let u = 0; u < m.length - 1; u++) {
-                  const h = { type: v, index: i, attrDynamics: p, name: d };
-                  s.push(h);
+        if (node.hasAttributes()) {
+          const attributeNames = node.getAttributeNames();
+          for (const attrName of attributeNames) {
+            if (attrName.endsWith(WC_MARKER)) {
+              const realName = attributes[dependencyIndex++];
+              const attrValue = node.getAttribute(attrName);
+              if (attrValue !== "0") {
+                const dynamicParts = attrValue.split(WC_MARKER);
+                for (let i = 0; i < dynamicParts.length - 1; i++) {
+                  const dependency = {
+                    type: ATTR,
+                    index: nodeIndex,
+                    attrDynamics: attrValue,
+                    name: realName
+                  };
+                  dependencies.push(dependency);
                 }
               } else {
-                const m = { type: v, index: i, name: d };
-                s.push(m);
+                const dependency = {
+                  type: ATTR,
+                  index: nodeIndex,
+                  name: realName
+                };
+                dependencies.push(dependency);
               }
-              t.removeAttribute(l);
+              node.removeAttribute(attrName);
             }
-        }
-        if (L.test(t.tagName)) {
-          const c2 = t.textContent.split(_), l = c2.length - 1;
-          if (l > 0) {
-            t.textContent = "";
-            for (let d = 0; d < l; d++)
-              t.append(c2[d], document.createComment("")), k.nextNode(), s.push({ type: w, index: ++i });
-            t.append(c2[l], document.createComment(""));
           }
         }
-      } else
-        t.nodeType === 8 && t.data === `?${_}` && s.push({ type: w, index: i });
-      i++;
+        if (onlyTextChildrenElementsRegex.test(node.tagName)) {
+          const strings = node.textContent.split(WC_MARKER);
+          const lastIndex = strings.length - 1;
+          if (lastIndex > 0) {
+            node.textContent = "";
+            for (let i = 0; i < lastIndex; i++) {
+              node.append(strings[i], document.createComment(""));
+              treeWalker.nextNode();
+              dependencies.push({ type: NODE, index: ++nodeIndex });
+            }
+            node.append(strings[lastIndex], document.createComment(""));
+          }
+        }
+      } else if (node.nodeType === 8) {
+        const data = node.data;
+        if (data === `?${WC_MARKER}`)
+          dependencies.push({ type: NODE, index: nodeIndex });
+      }
+      nodeIndex++;
     }
-    return s;
+    return dependencies;
   };
-  var M = (o) => {
-    const [e, n] = K(o), s = document.createElement("template");
-    s.innerHTML = e;
-    const t = Z(s, o, n);
-    return new F(s, t);
+  var __createTemplate = (html2) => {
+    const [dom, attributes] = __createHtml(html2.parts);
+    const template = document.createElement("template");
+    template.innerHTML = dom;
+    const dependencies = __createDependencies(template, html2.parts, attributes);
+    return new CachedTemplate(template, dependencies, __getRenderHtmlString(html2));
   };
-  var Y = (o) => {
-    let e = "";
-    const { parts: n, values: s } = o;
-    for (let t = 0; t < n.length; t++)
-      e += n[t], s[t]?.componentName && (e += s[t].componentName);
-    return e;
+  var __getRenderHtmlString = (render) => {
+    let value = "";
+    const { parts, values } = render;
+    for (let i = 0; i < parts.length; i++) {
+      value += parts[i];
+      if (values[i]?.componentName)
+        value += values[i].componentName;
+    }
+    return value;
   };
-  var J = (o, e, n) => {
-    const s = o !== e, t = !!n.attrStructure, i = o?._$wompChildren && n.startNode.nextSibling !== o.nodes[0];
-    return s || t || i;
+  var __shouldUpdate = (currentValue, oldValue, dependency) => {
+    const valuesDiffers = currentValue !== oldValue;
+    const isComposedAttribute = !!dependency.attrStructure;
+    const isWompChildren = currentValue?._$wompChildren;
+    const childrenNeedUpdate = isWompChildren && dependency.startNode.nextSibling !== currentValue.nodes[0];
+    return valuesDiffers || isComposedAttribute || childrenNeedUpdate;
   };
-  var E = (o, e, n) => {
-    const s = [...e];
-    for (let t = 0; t < o.length; t++) {
-      const a = o[t], i = s[t], r = n[t];
-      if (J(i, r, a)) {
-        if (a.isNode) {
-          if (i === false) {
-            a.clearValue();
-            continue;
-          }
-          if (i?._$wompHtml) {
-            const p = r?.stringifiedTemplate, m = Y(i);
-            if (r === void 0 || !(m === p)) {
-              const f = M(i.parts).clone(), [y, x] = f;
-              s[t] = new z(m, i.values, f), E(x, i.values, r?.values ?? r ?? []);
-              const b = a.endNode, $ = a.startNode;
-              let g = $.nextSibling;
-              for (; g !== b; )
-                g.remove(), g = $.nextSibling;
-              for (g = $; y.childNodes.length; )
-                g.after(y.childNodes[0]), g = g.nextSibling;
-            } else {
-              const [h, f] = r.template, y = E(f, i.values, r.values);
-              r.values = y, s[t] = r;
+  var __setValues = (dynamics, values, oldValues) => {
+    const newValues = [...values];
+    for (let i = 0; i < dynamics.length; i++) {
+      const currentDependency = dynamics[i];
+      const currentValue = newValues[i];
+      const oldValue = oldValues[i];
+      if (!__shouldUpdate(currentValue, oldValue, currentDependency))
+        continue;
+      if (currentDependency.isNode) {
+        if (currentValue === false) {
+          currentDependency.clearValue();
+          continue;
+        }
+        if (currentValue?._$wompHtml) {
+          const oldStringified = oldValue?.stringifiedTemplate;
+          const newTemplate = __getRenderHtmlString(currentValue);
+          const sameString = newTemplate === oldStringified;
+          if (oldValue === void 0 || !sameString) {
+            const cachedTemplate = __createTemplate(currentValue);
+            const template = cachedTemplate.clone();
+            const [fragment, dynamics2] = template;
+            newValues[i] = new HtmlProcessedValue(newTemplate, currentValue.values, template);
+            __setValues(dynamics2, currentValue.values, oldValue?.values ?? oldValue ?? []);
+            const endNode = currentDependency.endNode;
+            const startNode2 = currentDependency.startNode;
+            let currentNode = startNode2.nextSibling;
+            while (currentNode !== endNode) {
+              currentNode.remove();
+              currentNode = startNode2.nextSibling;
             }
-            continue;
-          }
-          const c2 = i !== Object(i), l = r !== Object(r) && r !== void 0, d = a.startNode;
-          if (c2)
-            l ? d.nextSibling ? d.nextSibling.textContent = i : d.after(i) : (a.clearValue(), d.after(i));
-          else {
-            let p = d.nextSibling, m = 0, u = 0;
-            if (i._$wompChildren) {
-              const h = i.nodes;
-              for (; u < h.length; ) {
-                (!p || u === 0) && (p = d);
-                const f = h[m];
-                m++, p.after(f), p = p.nextSibling, u++;
-              }
-            } else
-              Array.isArray(i) && (r?.isArrayDependency ? s[t] = r.checkUpdates(i) : (a.clearValue(), s[t] = new U(i, a)));
-          }
-        } else if (a.isAttr)
-          if (a.name.startsWith("@"))
-            a.callback = i;
-          else {
-            const l = a.attrStructure;
-            if (l) {
-              const d = l.split(_);
-              let p = i;
-              for (let m = 0; m < d.length - 1; m++)
-                d[m] = `${d[m]}${p}`, t++, p = s[t];
-              t--, a.updateValue(d.join("").trim());
-            } else
-              a.updateValue(i);
-          }
-        else if (a.isTag) {
-          const c2 = a.node;
-          let l = null;
-          const d = i._$wompF, p = d ? i.componentName : i;
-          if (c2.nodeName !== p.toUpperCase()) {
-            const m = c2.getAttributeNames();
-            if (d) {
-              const f = {};
-              for (const x of m) {
-                const b = c2.getAttribute(x);
-                f[x] = b === "" ? true : b;
-              }
-              l = new i.class(), l._$initialProps = f;
-              const y = c2.childNodes;
-              for (; y.length; )
-                l.appendChild(y[0]);
-            } else {
-              l = document.createElement(p);
-              for (const f of m)
-                l.setAttribute(f, c2.getAttribute(f));
+            currentNode = startNode2;
+            while (fragment.childNodes.length) {
+              currentNode.after(fragment.childNodes[0]);
+              currentNode = currentNode.nextSibling;
             }
-            let u = t, h = o[u];
-            for (; h?.node === c2; )
-              h.node = l, h = o[++u], h?.name && h?.name !== "ref" && (l._$initialProps[h.name] = e[u]);
-            c2.replaceWith(l);
+          } else {
+            const [_, dynamics2] = oldValue.template;
+            const processedValues = __setValues(
+              dynamics2,
+              currentValue.values,
+              oldValue.values
+            );
+            oldValue.values = processedValues;
+            newValues[i] = oldValue;
           }
+          continue;
+        }
+        const isPrimitive = currentValue !== Object(currentValue);
+        const oldIsPrimitive = oldValue !== Object(oldValue) && oldValue !== void 0;
+        const startNode = currentDependency.startNode;
+        if (isPrimitive) {
+          if (oldIsPrimitive) {
+            if (startNode.nextSibling)
+              startNode.nextSibling.textContent = currentValue;
+            else
+              startNode.after(currentValue);
+          } else {
+            currentDependency.clearValue();
+            startNode.after(currentValue);
+          }
+        } else {
+          let currentNode = startNode.nextSibling;
+          let newNodeIndex = 0;
+          let index = 0;
+          if (currentValue._$wompChildren) {
+            const childrenNodes = currentValue.nodes;
+            while (index < childrenNodes.length) {
+              if (!currentNode || index === 0)
+                currentNode = startNode;
+              const newNode = childrenNodes[newNodeIndex];
+              newNodeIndex++;
+              currentNode.after(newNode);
+              currentNode = currentNode.nextSibling;
+              index++;
+            }
+          } else {
+            if (Array.isArray(currentValue)) {
+              if (!oldValue?.isArrayDependency) {
+                currentDependency.clearValue();
+                newValues[i] = new WompArrayDependency(currentValue, currentDependency);
+              } else
+                newValues[i] = oldValue.checkUpdates(currentValue);
+            } else if (DEV_MODE) {
+              console.warn(
+                "Rendering objects is not supported. Doing a stringified version of it can rise errors.\nThis node will be ignored."
+              );
+            }
+          }
+        }
+      } else if (currentDependency.isAttr) {
+        const attrName = currentDependency.name;
+        if (attrName.startsWith("@")) {
+          currentDependency.callback = currentValue;
+        } else {
+          const attrStructure = currentDependency.attrStructure;
+          if (attrStructure) {
+            const parts = attrStructure.split(WC_MARKER);
+            let dynamicValue = currentValue;
+            for (let j = 0; j < parts.length - 1; j++) {
+              parts[j] = `${parts[j]}${dynamicValue}`;
+              i++;
+              dynamicValue = newValues[i];
+            }
+            i--;
+            currentDependency.updateValue(parts.join("").trim());
+          } else {
+            currentDependency.updateValue(currentValue);
+          }
+        }
+      } else if (currentDependency.isTag) {
+        const node = currentDependency.node;
+        let customElement = null;
+        const isCustomComponent = currentValue._$wompF;
+        const newNodeName = isCustomComponent ? currentValue.componentName : currentValue;
+        if (node.nodeName !== newNodeName.toUpperCase()) {
+          const oldAttributes = node.getAttributeNames();
+          if (isCustomComponent) {
+            if (DEV_MODE) {
+              if (node._$womp) {
+                console.error(
+                  "Dynamic tags are currently not supported, unsless used to render for the first time a custom component.\nInstead, you can use conditional rendering.\n(e.g. condition ? html`<${First} />` : html`<${Second} />`)."
+                );
+                continue;
+              }
+            }
+            const initialProps = {};
+            for (const attrName of oldAttributes) {
+              const attrValue = node.getAttribute(attrName);
+              initialProps[attrName] = attrValue === "" ? true : attrValue;
+            }
+            customElement = new currentValue.class();
+            customElement._$initialProps = initialProps;
+            const childNodes = node.childNodes;
+            while (childNodes.length) {
+              customElement.appendChild(childNodes[0]);
+            }
+          } else {
+            customElement = document.createElement(newNodeName);
+            for (const attrName of oldAttributes) {
+              customElement.setAttribute(attrName, node.getAttribute(attrName));
+            }
+          }
+          let index = i;
+          let currentDynamic = dynamics[index];
+          while (currentDynamic?.node === node) {
+            currentDynamic.node = customElement;
+            currentDynamic = dynamics[++index];
+            if (currentDynamic?.name && currentDynamic?.name !== "ref")
+              customElement._$initialProps[currentDynamic.name] = values[index];
+          }
+          node.replaceWith(customElement);
         }
       }
     }
-    return s;
+    return newValues;
   };
-  var Q = (o, e) => {
-    const { generatedCSS: n, styles: s } = o.options;
-    let t;
-    const a = `${e.name}__styles`;
-    return window.wompHydrationData ? (t = document.createElement("link"), t.rel = "stylesheet", t.href = `/${e.name}.css`) : (t = document.createElement("style"), n && (t.classList.add(a), t.textContent = n, e.shadow || document.body.appendChild(t))), class extends HTMLElement {
+  var _$womp = (Component, options) => {
+    const { generatedCSS, styles } = Component.options;
+    let style;
+    const styleClassName = `${options.name}__styles`;
+    if (!window.wompHydrationData) {
+      style = document.createElement("style");
+      if (generatedCSS) {
+        style.classList.add(styleClassName);
+        style.textContent = generatedCSS;
+        if (!options.shadow) {
+          document.body.appendChild(style);
+        }
+      }
+    } else {
+      style = document.createElement("link");
+      style.rel = "stylesheet";
+      style.href = `/${options.name}.css`;
+    }
+    const WompComponent2 = class extends HTMLElement {
       constructor() {
         super();
         this._$womp = true;
@@ -357,155 +640,376 @@
         this._$womp = true;
       }
       static {
-        this.componentName = e.name;
+        this.componentName = options.name;
       }
-      static _$getOrCreateTemplate(c2) {
-        return this._$cachedTemplate || (this._$cachedTemplate = M(c2)), this._$cachedTemplate;
+      /**
+       * Get the already present cached template, or create a new one if the component is rendering
+       * for the first time.
+       * @param parts The template parts from the html function.
+       * @returns The cached template.
+       */
+      static _$getOrCreateTemplate(html2, makeNew) {
+        if (!this._$cachedTemplate || makeNew)
+          this._$cachedTemplate = __createTemplate(html2);
+        return this._$cachedTemplate;
       }
+      /** @override component has been connected to the DOM */
       connectedCallback() {
-        this.__isInDOM = true, !this.__connected && this.isConnected && this.initElement();
+        this.__isInDOM = true;
+        if (!this.__connected && this.isConnected)
+          this.initElement();
       }
+      /** @override component has been disconnected from the DOM */
       disconnectedCallback() {
-        this.__connected && (this.__isInDOM = false, Promise.resolve().then(() => {
-          this.__isInDOM ? (this._$hasBeenMoved = true, this._$usesContext && this.requestRender()) : this.onDisconnected();
-        }));
+        if (this.__connected) {
+          this.__isInDOM = false;
+          Promise.resolve().then(() => {
+            if (!this.__isInDOM) {
+              this.onDisconnected();
+              if (DEV_MODE)
+                console.warn("Disconnected", this);
+            } else {
+              this._$hasBeenMoved = true;
+              if (this._$usesContext)
+                this.requestRender();
+            }
+          });
+        }
       }
+      /**
+       * This public callback will be used when a component is removed permanently from the DOM.
+       * It allows other code to hook into the component and unmount listeners or similar when the
+       * component is disconnected from the DOM.
+       */
       onDisconnected() {
       }
+      /**
+       * Initializes the component with the state, props, and styles.
+       */
       initElement() {
         this.__ROOT = this;
-        const c2 = this.getAttribute("womp-hydrate");
-        c2 !== null && window.wompHydrationData && this.__hydrate(c2), this.props = { ...this.props, ...this._$initialProps, styles: s };
-        const l = this.getAttributeNames();
-        for (const C of l)
-          if (!this.props.hasOwnProperty(C)) {
-            const H = this.getAttribute(C);
-            this.props[C] = H === "" ? true : H;
+        this.props = {
+          ...this.props,
+          ...this._$initialProps,
+          styles
+        };
+        const componentAttributes = this.getAttributeNames();
+        for (const attrName of componentAttributes) {
+          if (!this.props.hasOwnProperty(attrName)) {
+            const attrValue = this.getAttribute(attrName);
+            this.props[attrName] = attrValue === "" ? true : attrValue;
           }
-        const d = this.__ROOT.childNodes, p = [];
-        for (; d.length; )
-          p.push(d[0]), d[0].remove();
-        const m = new G(p);
-        this.props.children = m, e.shadow && !this.shadowRoot && (this.__ROOT = this.attachShadow({ mode: "open" }));
-        const u = t.cloneNode(true);
-        this.__ROOT.appendChild(u);
-        const h = this.__callComponent(), { values: f, parts: y } = h, x = this.constructor._$getOrCreateTemplate(y), [b, $] = x.clone();
-        this.__dynamics = $;
-        const g = E(this.__dynamics, f, this.__oldValues);
-        for (this.__oldValues = g; b.childNodes.length; )
-          this.__ROOT.appendChild(b.childNodes[0]);
-        this.__isInitializing = false, this.__connected = true;
+        }
+        if (DEV_MODE && this.props["wc-perf"])
+          this._$measurePerf = true;
+        if (DEV_MODE && this._$measurePerf)
+          console.time("First render " + options.name);
+        const childNodes = this.__ROOT.childNodes;
+        const childrenArray = [];
+        while (childNodes.length) {
+          childrenArray.push(childNodes[0]);
+          childNodes[0].remove();
+        }
+        const children = new WompChildren(childrenArray);
+        this.props.children = children;
+        if (options.shadow && !this.shadowRoot)
+          this.__ROOT = this.attachShadow({ mode: "open" });
+        const clonedStyles = style.cloneNode(true);
+        this.__ROOT.appendChild(clonedStyles);
+        this.__render();
+        this.__isInitializing = false;
+        this.__connected = true;
+        if (DEV_MODE && this._$measurePerf)
+          console.timeEnd("First render " + options.name);
       }
-      __hydrate(c2) {
-        this.shadowRoot && (this.__ROOT = this.shadowRoot);
-        const l = window.wompHydrationData[e.name][c2];
-        this._$initialProps = structuredClone(l);
-      }
+      /**
+       * Calls the functional component by first setting correct values to the
+       * [currentRenderingComponent] and [currentHookIndex] variables.
+       * @returns The result of the call.
+       */
       __callComponent() {
-        D = this, N = 0;
-        const c2 = o.call(this, this.props);
-        let l = c2;
-        return (typeof c2 == "string" || c2 instanceof HTMLElement) && (l = html`${c2}`), l;
+        currentRenderingComponent = this;
+        currentHookIndex = 0;
+        const result = Component.call(this, this.props);
+        let renderHtml = result;
+        if (typeof result === "string" || result instanceof HTMLElement)
+          renderHtml = html`${result}`;
+        return renderHtml;
       }
+      /**
+       * Calls the component and executes the operations to update the DOM.
+       */
+      __render() {
+        const renderHtml = this.__callComponent();
+        if (renderHtml === null) {
+          this.remove();
+          return;
+        }
+        const constructor = this.constructor;
+        const shouldRebuild = __getRenderHtmlString(renderHtml) !== constructor._$cachedTemplate?.stringified;
+        if (this.__isInitializing || shouldRebuild) {
+          const template = constructor._$getOrCreateTemplate(renderHtml, shouldRebuild);
+          const [fragment, dynamics] = template.clone();
+          this.__dynamics = dynamics;
+          const elaboratedValues = __setValues(this.__dynamics, renderHtml.values, this.__oldValues);
+          this.__oldValues = elaboratedValues;
+          if (!this.__isInitializing)
+            this.__ROOT.innerHTML = "";
+          while (fragment.childNodes.length) {
+            this.__ROOT.appendChild(fragment.childNodes[0]);
+          }
+        } else {
+          const oldValues = __setValues(this.__dynamics, renderHtml.values, this.__oldValues);
+          this.__oldValues = oldValues;
+        }
+      }
+      /**
+       * It requests a render to the component. If the component has already received a render
+       * request, the request will be rejected. This is to avoid multiple re-renders when it's not
+       * necessary. The following function will cause a single re-render:
+       * ```javascript
+       * const incBy2 = () => {
+       *   setState((oldState) => oldState + 1)
+       *   setState((oldState) => oldState + 1)
+       * }
+       * ```
+       */
       requestRender() {
-        this.__updating || (this.__updating = true, Promise.resolve().then(() => {
-          const c2 = this.__callComponent(), l = E(this.__dynamics, c2.values, this.__oldValues);
-          this.__oldValues = l, this.__updating = false, this._$hasBeenMoved = false;
-        }));
+        if (!this.__updating) {
+          this.__updating = true;
+          Promise.resolve().then(() => {
+            if (DEV_MODE && this._$measurePerf)
+              console.time("Re-render " + options.name);
+            this.__render();
+            this.__updating = false;
+            this._$hasBeenMoved = false;
+            if (DEV_MODE && this._$measurePerf)
+              console.timeEnd("Re-render " + options.name);
+          });
+        }
       }
-      updateProps(c2, l) {
-        this.props[c2] !== l && (this.props[c2] = l, this.__isInitializing || (console.warn(`Updating ${c2}`, this.__isInitializing), this.requestRender()));
+      /**
+       * It'll set a new value to a specific prop of the component, and a re-render will be requested.
+       * @param prop The prop name.
+       * @param value The new value to set.
+       */
+      updateProps(prop, value) {
+        if (this.props[prop] !== value) {
+          this.props[prop] = value;
+          if (!this.__isInitializing) {
+            console.warn(`Updating ${prop}`, this.__isInitializing);
+            this.requestRender();
+          }
+        }
       }
     };
+    return WompComponent2;
   };
   var useHook = () => {
-    const n = [D, N];
-    return N++, n;
+    const currentComponent = currentRenderingComponent;
+    const currentIndex = currentHookIndex;
+    const res = [currentComponent, currentIndex];
+    currentHookIndex++;
+    return res;
   };
-  var useState = (o) => {
-    const [e, n] = useHook();
-    if (!e)
-      return [o, () => {
-      }];
-    if (!e._$hooks.hasOwnProperty(n)) {
-      const t = n;
-      e._$hooks[t] = [o, (a) => {
-        let i = a;
-        const r = e._$hooks[t];
-        typeof a == "function" && (i = a(r[0])), i !== r[0] && (r[0] = i, e.requestRender());
+  var useState = (defaultValue) => {
+    const [component, hookIndex] = useHook();
+    if (!component) {
+      return [defaultValue, () => {
       }];
     }
-    return e._$hooks[n];
+    if (!component._$hooks.hasOwnProperty(hookIndex)) {
+      const index = hookIndex;
+      component._$hooks[index] = [
+        defaultValue,
+        (newValue) => {
+          let computedValue = newValue;
+          const stateHook = component._$hooks[index];
+          if (typeof newValue === "function") {
+            computedValue = newValue(stateHook[0]);
+          }
+          if (computedValue !== stateHook[0]) {
+            stateHook[0] = computedValue;
+            component.requestRender();
+          }
+        }
+      ];
+    }
+    const state = component._$hooks[hookIndex];
+    return state;
   };
-  var useRef = (o = null) => {
-    const [e, n] = useHook();
-    return e._$hooks.hasOwnProperty(n) || (e._$hooks[n] = { current: o, __wcRef: true }), e._$hooks[n];
+  var useRef = (initialValue = null) => {
+    const [component, hookIndex] = useHook();
+    if (!component._$hooks.hasOwnProperty(hookIndex)) {
+      component._$hooks[hookIndex] = {
+        current: initialValue,
+        __wcRef: true
+      };
+    }
+    const ref = component._$hooks[hookIndex];
+    return ref;
   };
-  var X = () => {
-    let o = 0;
+  var useIdMemo = () => {
+    let counter = 0;
     return () => {
-      const [e, n] = useHook();
-      return e._$hooks.hasOwnProperty(n) || (e._$hooks[n] = `:r${o}:`, o++), e._$hooks[n];
+      const [component, hookIndex] = useHook();
+      if (!component._$hooks.hasOwnProperty(hookIndex)) {
+        component._$hooks[hookIndex] = `:r${counter}:`;
+        counter++;
+      }
+      const callback = component._$hooks[hookIndex];
+      return callback;
     };
   };
-  var useId = X();
-  var useMemo = (o, e) => {
-    const [n, s] = useHook();
-    if (!n._$hooks.hasOwnProperty(s))
-      n._$hooks[s] = { value: o(), dependencies: e };
-    else {
-      const a = n._$hooks[s];
-      for (let i = 0; i < e.length; i++)
-        if (a.dependencies[i] !== e[i]) {
-          a.dependencies = e, a.value = o();
+  var useId = useIdMemo();
+  var useMemo = (callbackFn, dependencies) => {
+    const [component, hookIndex] = useHook();
+    if (!component._$hooks.hasOwnProperty(hookIndex)) {
+      component._$hooks[hookIndex] = {
+        value: callbackFn(),
+        dependencies
+      };
+    } else {
+      const oldMemo = component._$hooks[hookIndex];
+      for (let i = 0; i < dependencies.length; i++) {
+        const oldDep = oldMemo.dependencies[i];
+        if (oldDep !== dependencies[i]) {
+          oldMemo.dependencies = dependencies;
+          oldMemo.value = callbackFn();
           break;
         }
+      }
     }
-    return n._$hooks[s].value;
+    const memoizedResult = component._$hooks[hookIndex];
+    return memoizedResult.value;
   };
-  var useExposed = (o) => {
-    const e = D, n = Object.keys(o);
-    for (const s of n)
-      e[s] = o[s];
+  var useExposed = (toExpose) => {
+    const component = currentRenderingComponent;
+    const keys = Object.keys(toExpose);
+    for (const key of keys) {
+      component[key] = toExpose[key];
+    }
   };
-  var ee = () => {
-    let o = 0;
-    return (e) => {
-      const n = `womp-context-provider-${o}`;
-      o++;
-      const s = defineWomp(({ children: a }) => {
-        const r = useRef(/* @__PURE__ */ new Set());
-        return useExposed({ subscribers: r }), r.current.forEach((c2) => c2.requestRender()), html`${a}`;
-      }, { name: n, cssGeneration: false });
-      return { name: n, Provider: s, default: e, subscribers: /* @__PURE__ */ new Set() };
+  var createContextMemo = () => {
+    let contextIdentifier = 0;
+    return (initialValue) => {
+      const name = `womp-context-provider-${contextIdentifier}`;
+      contextIdentifier++;
+      const ProviderFunction = defineWomp(
+        ({ children }) => {
+          const initialSubscribers = /* @__PURE__ */ new Set();
+          const subscribers = useRef(initialSubscribers);
+          useExposed({ subscribers });
+          subscribers.current.forEach((el) => el.requestRender());
+          return html`${children}`;
+        },
+        {
+          name,
+          cssGeneration: false
+        }
+      );
+      const Context = {
+        name,
+        Provider: ProviderFunction,
+        default: initialValue,
+        subscribers: /* @__PURE__ */ new Set()
+      };
+      return Context;
     };
   };
-  var createContext = ee();
-  function html(o, ...e) {
-    const n = [], s = o.length - 1;
-    if (S)
-      n.push(...e);
-    else
-      for (let t = 0; t < s; t++)
-        o[t].endsWith("</") || n.push(e[t]);
-    return { parts: o, values: n, _$wompHtml: true };
+  var createContext = createContextMemo();
+  var useContext = (Context) => {
+    const [component, hookIndex] = useHook();
+    component._$usesContext = true;
+    if (!component._$hooks.hasOwnProperty(hookIndex) || component._$hasBeenMoved) {
+      let parent = component;
+      const toFind = Context.name.toUpperCase();
+      while (parent && parent.nodeName !== toFind && parent !== document.body) {
+        if (parent instanceof ShadowRoot)
+          parent = parent.host;
+        else
+          parent = parent.parentNode;
+      }
+      const oldParent = component._$hooks[hookIndex]?.node;
+      if (parent && parent !== document.body) {
+        parent.subscribers.current.add(component);
+        const oldDisconnect = component.onDisconnected;
+        component.onDisconnected = () => {
+          parent.subscribers.current.delete(component);
+          oldDisconnect();
+        };
+      } else if (oldParent) {
+        if (DEV_MODE) {
+          console.warn(
+            `The element ${component.tagName} doens't have access to the Context ${Context.name} because is no longer a child of it.`
+          );
+        }
+        oldParent.subscribers.current.delete(component);
+      } else if (DEV_MODE && component.isConnected) {
+        console.warn(
+          `The element ${component.tagName} doens't have access to the Context ${Context.name}. The default value will be returned instead.`
+        );
+      }
+      component._$hooks[hookIndex] = {
+        node: parent,
+        value: parent && parent !== document.body ? parent.props.value : Context.default
+      };
+    }
+    const contextNode = component._$hooks[hookIndex].node;
+    return contextNode ? contextNode.props.value : Context.default;
+  };
+  function html(templateParts, ...values) {
+    const cleanValues = [];
+    const length = templateParts.length - 1;
+    if (!IS_SERVER) {
+      for (let i = 0; i < length; i++) {
+        if (!templateParts[i].endsWith("</"))
+          cleanValues.push(values[i]);
+      }
+    } else {
+      cleanValues.push(...values);
+    }
+    return {
+      parts: templateParts,
+      values: cleanValues,
+      _$wompHtml: true
+    };
   }
-  var wompDefaultOptions = { shadow: false, name: "", cssGeneration: true };
+  var wompDefaultOptions = {
+    shadow: false,
+    name: "",
+    cssGeneration: true
+  };
   var registeredComponents = {};
-  function defineWomp(o, e) {
-    o.css || (o.css = "");
-    const n = { ...wompDefaultOptions, ...e || {} };
-    if (!n.name) {
-      let a = o.name.replace(/.[A-Z]/g, (i) => `${i[0]}-${i[1].toLowerCase()}`).toLowerCase();
-      a.includes("-") || (a += "-womp"), n.name = a;
+  function defineWomp(Component, options) {
+    if (!Component.css)
+      Component.css = "";
+    const componentOptions = {
+      ...wompDefaultOptions,
+      ...options || {}
+    };
+    if (!componentOptions.name) {
+      let newName = Component.name.replace(/.[A-Z]/g, (letter) => `${letter[0]}-${letter[1].toLowerCase()}`).toLowerCase();
+      if (!newName.includes("-"))
+        newName += "-womp";
+      componentOptions.name = newName;
     }
-    o.componentName = n.name, o._$wompF = true;
-    const [s, t] = B(o, n);
-    if (o.css = s, o.options = { generatedCSS: s, styles: t, shadow: n.shadow }, !S) {
-      const a = Q(o, n);
-      o.class = a, customElements.define(n.name, a);
+    Component.componentName = componentOptions.name;
+    Component._$wompF = true;
+    const [generatedCSS, styles] = __generateSpecifcStyles(Component, componentOptions);
+    Component.css = generatedCSS;
+    Component.options = {
+      generatedCSS,
+      styles,
+      shadow: componentOptions.shadow
+    };
+    if (!IS_SERVER) {
+      const ComponentClass = _$womp(Component, componentOptions);
+      Component.class = ComponentClass;
+      customElements.define(componentOptions.name, ComponentClass);
     }
-    return registeredComponents[n.name] = o, o;
+    registeredComponents[componentOptions.name] = Component;
+    return Component;
   }
 
   // ../womp/jsx-runtime.js
@@ -538,18 +1042,21 @@
   var jsxs = jsx;
 
   // ts/Routes.tsx
-  var buildTreeStructure = (childNodes, structure = []) => {
+  var buildTreeStructure = (childNodes, structure = [], parent = null) => {
     childNodes.forEach((child) => {
       if (child instanceof Route.class) {
         const props = child.props;
         const route = {
+          parent,
           element: props.element,
           path: props.path,
-          index: props.index,
+          index: null,
           children: []
         };
+        if (props.index)
+          parent.index = route;
         structure.push(route);
-        buildTreeStructure(child.childNodes, route.children);
+        buildTreeStructure(child.childNodes, route.children, route);
       }
     });
     return structure;
@@ -578,7 +1085,7 @@
       const isFallback = routePath.endsWith("*");
       if (!isFallback && routePath.split("/").length !== currentRoute.split("/").length)
         continue;
-      if (route === currentRoute) {
+      if (routePath === currentRoute) {
         matches.exact = route;
         break;
       }
@@ -612,7 +1119,7 @@
       }
     }
     if (matches.exact) {
-      return matches.exact;
+      return [matches.exact, {}];
     } else {
       const routes2 = matches.parametric;
       const paths = Object.keys(routes2);
@@ -644,20 +1151,54 @@
         }
         return difference;
       });
-      console.log(paths);
       return routes2[paths[0]];
     }
   };
+  var RouterContext = createContext({});
   function Routes({ children }) {
+    const context = useRef({
+      route: null,
+      params: null
+    });
     const [currentRoute, setCurrentRoute] = useState(window.location.pathname);
     const treeStructure = useMemo(() => buildTreeStructure(children.nodes), []);
     const routes = useMemo(() => getRoutes(treeStructure), []);
-    const match = getMatch(routes, currentRoute);
-    console.log(match);
-    return /* @__PURE__ */ jsx(Fragment, {});
+    const [route, params] = getMatch(routes, currentRoute);
+    let root = route;
+    let nextRoute = null;
+    root.nextRoute = nextRoute;
+    while (root.parent) {
+      nextRoute = root;
+      root = root.parent;
+      root.nextRoute = nextRoute;
+    }
+    context.current = {
+      ...context.current,
+      route: root,
+      params
+    };
+    return /* @__PURE__ */ jsx(RouterContext.Provider, { value: context.current, children: root.element });
   }
   defineWomp(Routes, {
     name: "womp-routes"
+  });
+  function ChildRoute() {
+    const routerContext = useContext(RouterContext);
+    if (routerContext && routerContext.route) {
+      const route = routerContext.route;
+      const newRoute = route.nextRoute;
+      if (newRoute) {
+        routerContext.route = newRoute;
+        return newRoute.element;
+      } else if (route.index) {
+        routerContext.route = null;
+        return route.index.element;
+      }
+    }
+    return null;
+  }
+  defineWomp(ChildRoute, {
+    name: "child-route"
   });
   function Route(props) {
     return /* @__PURE__ */ jsx("div", {});
@@ -667,20 +1208,38 @@
   });
 
   // src/App.tsx
+  var Teams = () => {
+    return /* @__PURE__ */ jsxs("div", { children: [
+      /* @__PURE__ */ jsx("p", { children: "Bro sono dentro un team io" }),
+      /* @__PURE__ */ jsx(ChildRoute, {})
+    ] });
+  };
+  defineWomp(Teams);
+  var Root = () => {
+    return /* @__PURE__ */ jsxs("div", { children: [
+      /* @__PURE__ */ jsx("p", { children: "Root!!" }),
+      /* @__PURE__ */ jsx(ChildRoute, {})
+    ] });
+  };
+  defineWomp(Root);
+  var Team = () => {
+    return /* @__PURE__ */ jsx("div", { children: /* @__PURE__ */ jsx("p", { children: "Team singolo!!" }) });
+  };
+  defineWomp(Team);
   function App({ children }) {
     return /* @__PURE__ */ jsxs(Routes, { children: [
-      /* @__PURE__ */ jsxs(Route, { path: "/", element: /* @__PURE__ */ jsx("div", {}), children: [
+      /* @__PURE__ */ jsxs(Route, { path: "/", element: /* @__PURE__ */ jsx(Root, {}), children: [
         /* @__PURE__ */ jsx(Route, { index: true, element: /* @__PURE__ */ jsx("div", {}) }),
         /* @__PURE__ */ jsx(Route, { path: ":boh", element: /* @__PURE__ */ jsx("div", {}), children: /* @__PURE__ */ jsx(Route, { path: ":teamId/members/coaches", element: /* @__PURE__ */ jsx("div", {}) }) }),
-        /* @__PURE__ */ jsxs(Route, { path: "teams", element: /* @__PURE__ */ jsx("div", {}), children: [
+        /* @__PURE__ */ jsxs(Route, { path: "teams", element: /* @__PURE__ */ jsx(Teams, {}), children: [
           /* @__PURE__ */ jsx(Route, { path: "*", element: /* @__PURE__ */ jsx("div", {}) }),
-          /* @__PURE__ */ jsx(Route, { path: ":teamId", element: /* @__PURE__ */ jsx("div", {}) }),
+          /* @__PURE__ */ jsx(Route, { path: ":teamId", element: /* @__PURE__ */ jsx(Team, {}) }),
           /* @__PURE__ */ jsx(Route, { path: ":teamId/members/*", element: /* @__PURE__ */ jsx("div", {}) }),
           /* @__PURE__ */ jsx(Route, { path: ":teamId/members/coaches", element: /* @__PURE__ */ jsx("div", {}) }),
           /* @__PURE__ */ jsx(Route, { path: ":teamId/members/:param", element: /* @__PURE__ */ jsx("div", {}) }),
           /* @__PURE__ */ jsx(Route, { path: ":teamId/edit", element: /* @__PURE__ */ jsx("div", {}) }),
           /* @__PURE__ */ jsx(Route, { path: "new", element: /* @__PURE__ */ jsx("div", {}) }),
-          /* @__PURE__ */ jsx(Route, { index: true, element: /* @__PURE__ */ jsx("div", {}) })
+          /* @__PURE__ */ jsx(Route, { index: true, element: /* @__PURE__ */ jsx("div", { children: "Bro dai seleziona un team" }) })
         ] })
       ] }),
       /* @__PURE__ */ jsxs(Route, { element: /* @__PURE__ */ jsx("div", {}), children: [
@@ -694,5 +1253,4 @@
 })();
 //! Can cause problems. You should put also the "s" modifier
 //! Some valid selectors are marked as invalid e.g. :host/componentName, @media, etc.
-//! To finish
-//! when you implement hydration, immediately return: it's not necessary to initialize
+//! Find another way to quickly compare 2 renderHtml results

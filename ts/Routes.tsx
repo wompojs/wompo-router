@@ -2,9 +2,12 @@ import {
 	RenderHtml,
 	WompComponent,
 	WompProps,
+	createContext,
 	defineWomp,
+	useContext,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from 'womp';
 
@@ -16,24 +19,32 @@ ROUTES
 interface RoutesProps extends WompProps {}
 
 interface RouteStructure {
+	parent?: RouteStructure;
 	element?: RenderHtml;
 	path?: string;
 	children?: RouteStructure[];
-	index?: boolean;
+	index?: RouteStructure;
+	nextRoute?: RouteStructure;
 }
 
-const buildTreeStructure = (childNodes: Node[] | NodeList, structure: RouteStructure[] = []) => {
+const buildTreeStructure = (
+	childNodes: Node[] | NodeList,
+	structure: RouteStructure[] = [],
+	parent: RouteStructure = null
+) => {
 	childNodes.forEach((child) => {
 		if (child instanceof (Route as WompComponent).class) {
 			const props = child.props as RouteProps;
 			const route: RouteStructure = {
+				parent: parent,
 				element: props.element,
 				path: props.path,
-				index: props.index,
+				index: null,
 				children: [],
 			};
+			if (props.index) parent.index = route;
 			structure.push(route);
-			buildTreeStructure(child.childNodes, route.children);
+			buildTreeStructure(child.childNodes, route.children, route);
 		}
 	});
 	return structure;
@@ -59,15 +70,18 @@ const getRoutes = (
 	return paths;
 };
 
-const getMatch = (routes: [string, RouteStructure][], currentRoute: string) => {
+interface Params {
+	segments?: string[];
+	[key: string]: any;
+}
+
+const getMatch = (
+	routes: [string, RouteStructure][],
+	currentRoute: string
+): [RouteStructure, Params] => {
 	const matches: {
 		exact?: RouteStructure;
-		parametric?: {
-			[key: string]: {
-				segments?: string[];
-				[key: string]: any;
-			};
-		};
+		parametric?: Params;
 	} = {
 		exact: null,
 		parametric: {},
@@ -76,7 +90,7 @@ const getMatch = (routes: [string, RouteStructure][], currentRoute: string) => {
 		const [routePath, route] = routeStructure;
 		const isFallback = routePath.endsWith('*');
 		if (!isFallback && routePath.split('/').length !== currentRoute.split('/').length) continue;
-		if (route === currentRoute) {
+		if (routePath === currentRoute) {
 			matches.exact = route;
 			break;
 		}
@@ -110,7 +124,7 @@ const getMatch = (routes: [string, RouteStructure][], currentRoute: string) => {
 		}
 	}
 	if (matches.exact) {
-		return matches.exact;
+		return [matches.exact, {}];
 	} else {
 		const routes = matches.parametric;
 		const paths = Object.keys(routes);
@@ -139,18 +153,35 @@ const getMatch = (routes: [string, RouteStructure][], currentRoute: string) => {
 			}
 			return difference;
 		});
-		console.log(paths);
 		return routes[paths[0]];
 	}
 };
 
+const RouterContext = createContext({});
+
 export function Routes({ children }: RoutesProps) {
+	const context = useRef({
+		route: null,
+		params: null,
+	});
 	const [currentRoute, setCurrentRoute] = useState(window.location.pathname);
 	const treeStructure = useMemo(() => buildTreeStructure(children.nodes), []);
 	const routes: [string, RouteStructure][] = useMemo(() => getRoutes(treeStructure), []);
-	const match = getMatch(routes, currentRoute);
-	console.log(match);
-	return <></>;
+	const [route, params] = getMatch(routes, currentRoute);
+	let root = route;
+	let nextRoute = null;
+	root.nextRoute = nextRoute;
+	while (root.parent) {
+		nextRoute = root;
+		root = root.parent;
+		root.nextRoute = nextRoute;
+	}
+	context.current = {
+		...context.current,
+		route: root,
+		params: params,
+	};
+	return <RouterContext.Provider value={context.current}>{root.element}</RouterContext.Provider>;
 }
 
 defineWomp(Routes, {
@@ -159,7 +190,31 @@ defineWomp(Routes, {
 
 /* 
 ================================================================
-ROUTES
+NEXT-ROUTE
+================================================================
+*/
+export function ChildRoute() {
+	const routerContext = useContext(RouterContext);
+	if (routerContext && routerContext.route) {
+		const route = routerContext.route;
+		const newRoute = route.nextRoute;
+		if (newRoute) {
+			routerContext.route = newRoute;
+			return newRoute.element;
+		} else if (route.index) {
+			routerContext.route = null;
+			return route.index.element;
+		}
+	}
+	return null;
+}
+defineWomp(ChildRoute, {
+	name: 'child-route',
+});
+
+/* 
+================================================================
+ROUTE
 ================================================================
 */
 interface RouteProps extends WompProps {
