@@ -7,9 +7,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
-	useLayoutEffect,
 	useMemo,
-	useRef,
 	useState,
 } from 'womp';
 
@@ -27,9 +25,11 @@ const buildTreeStructure = (
 		if (child instanceof (Route as WompComponent).class) {
 			const props = child.props as RouteProps;
 			const route: RouteStructure = {
+				...props,
 				parent: parent,
 				element: props.element,
 				path: props.path,
+				lazy: props.lazy,
 				index: null,
 				children: [],
 			};
@@ -170,6 +170,11 @@ const getFullPath = (prevRoute: string, newRoute: string) => {
 		: prevRoute + (prevRoute.endsWith('/') ? '' : '/') + newRoute;
 };
 
+/* function Await({resolve, errorElement,}: any){
+	return 
+}
+defineWomp(Await) */
+
 /* 
 ================================================================
 ROUTES
@@ -177,12 +182,12 @@ ROUTES
 */
 interface RoutesProps extends WompProps {}
 
-interface RouteStructure {
-	parent?: RouteStructure;
+interface RouteStructure extends Omit<RouteProps, 'index' | 'children'> {
+	parent: RouteStructure;
 	element: RenderHtml;
-	path?: string;
-	children?: RouteStructure[];
-	index?: RouteStructure;
+	path: string;
+	children: RouteStructure[];
+	index: RouteStructure;
 	nextRoute?: RouteStructure;
 }
 
@@ -263,7 +268,8 @@ const SingleRouteContext = createContext<RouteStructure>(null);
 interface RouteProps extends WompProps {
 	path?: string;
 	index?: boolean;
-	element: RenderHtml;
+	element?: RenderHtml;
+	lazy?: () => Promise<any>;
 	route?: RouteStructure;
 }
 
