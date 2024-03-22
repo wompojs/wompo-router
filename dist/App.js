@@ -630,6 +630,7 @@ This can lead to unexpected behaviors, because this component can alter other co
         this._$initialProps = {};
         this._$usesContext = false;
         this._$hasBeenMoved = false;
+        this._$layoutEffects = [];
         this.__updating = false;
         this.__oldValues = [];
         this.__isInitializing = true;
@@ -714,8 +715,10 @@ This can lead to unexpected behaviors, because this component can alter other co
         this.props.children = children;
         if (options.shadow && !this.shadowRoot)
           this.__ROOT = this.attachShadow({ mode: "open" });
-        const clonedStyles = style.cloneNode(true);
-        this.__ROOT.appendChild(clonedStyles);
+        if (generatedCSS) {
+          const clonedStyles = style.cloneNode(true);
+          this.__ROOT.appendChild(clonedStyles);
+        }
         this.__render();
         this.__isInitializing = false;
         this.__connected = true;
@@ -741,7 +744,7 @@ This can lead to unexpected behaviors, because this component can alter other co
        */
       __render() {
         const renderHtml = this.__callComponent();
-        if (renderHtml === null) {
+        if (renderHtml === null || renderHtml === void 0) {
           this.remove();
           return;
         }
@@ -761,6 +764,10 @@ This can lead to unexpected behaviors, because this component can alter other co
         } else {
           const oldValues = __setValues(this.__dynamics, renderHtml.values, this.__oldValues);
           this.__oldValues = oldValues;
+        }
+        while (this._$layoutEffects.length) {
+          const layoutEffectHook = this._$layoutEffects.pop();
+          layoutEffectHook.cleanupFunction = layoutEffectHook.callback();
         }
       }
       /**
@@ -838,6 +845,41 @@ This can lead to unexpected behaviors, because this component can alter other co
     const state = component._$hooks[hookIndex];
     return state;
   };
+  var useEffect = (callback, dependencies = null) => {
+    const [component, hookIndex] = useHook();
+    if (!component._$hooks.hasOwnProperty(hookIndex)) {
+      const effectHook = {
+        dependencies,
+        callback,
+        cleanupFunction: null
+      };
+      component._$hooks[hookIndex] = effectHook;
+      Promise.resolve().then(() => {
+        effectHook.cleanupFunction = callback();
+      });
+    } else {
+      const componentEffect = component._$hooks[hookIndex];
+      if (dependencies !== null) {
+        for (let i = 0; i < dependencies.length; i++) {
+          const oldDep = componentEffect.dependencies[i];
+          if (oldDep !== dependencies[i]) {
+            if (typeof componentEffect.cleanupFunction === "function")
+              componentEffect.cleanupFunction();
+            Promise.resolve().then(() => {
+              componentEffect.cleanupFunction = callback();
+              componentEffect.dependencies = dependencies;
+            });
+            break;
+          }
+        }
+      } else {
+        Promise.resolve().then(() => {
+          componentEffect.cleanupFunction = callback();
+          componentEffect.dependencies = dependencies;
+        });
+      }
+    }
+  };
   var useRef = (initialValue = null) => {
     const [component, hookIndex] = useHook();
     if (!component._$hooks.hasOwnProperty(hookIndex)) {
@@ -848,6 +890,14 @@ This can lead to unexpected behaviors, because this component can alter other co
     }
     const ref = component._$hooks[hookIndex];
     return ref;
+  };
+  var useCallback = (callbackFn) => {
+    const [component, hookIndex] = useHook();
+    if (!component._$hooks.hasOwnProperty(hookIndex)) {
+      component._$hooks[hookIndex] = callbackFn;
+    }
+    const callback = component._$hooks[hookIndex];
+    return callback;
   };
   var useIdMemo = () => {
     let counter = 0;
@@ -951,8 +1001,7 @@ This can lead to unexpected behaviors, because this component can alter other co
         );
       }
       component._$hooks[hookIndex] = {
-        node: parent,
-        value: parent && parent !== document.body ? parent.props.value : Context.default
+        node: parent
       };
     }
     const contextNode = component._$hooks[hookIndex].node;
@@ -1075,11 +1124,45 @@ This can lead to unexpected behaviors, because this component can alter other co
     }
     return paths;
   };
-  var getMatch = (routes, currentRoute) => {
+  var getWichParametricRouteisMoreSpecific = (routes) => {
+    const parametricPaths = Object.keys(routes);
+    parametricPaths.sort((a, b) => {
+      const matchA = routes[a];
+      const matchB = routes[b];
+      const dynamicsA = Object.keys(matchA).filter((key) => key !== "segments").length;
+      const dynamicsB = Object.keys(matchB).filter((key) => key !== "segments").length;
+      const difference = dynamicsB - dynamicsA;
+      if (difference === 0) {
+        let staticsA = a.split("/");
+        let staticsB = b.split("/");
+        const lengthDifference = staticsB.length - staticsA.length;
+        if (lengthDifference !== 0)
+          return lengthDifference;
+        let staticsALength = 0;
+        let staticsBLength = 0;
+        for (let i = 0; i < staticsA.length; i++) {
+          const sA = staticsA[i];
+          const sB = staticsB[i];
+          if (!sA.startsWith(":"))
+            staticsALength++;
+          if (!sB.startsWith(":"))
+            staticsBLength++;
+          if (sA.startsWith(":") || sB.startsWith(":") || sA.startsWith("*") || sB.startsWith("*"))
+            break;
+        }
+        return staticsBLength - staticsALength;
+      }
+      return difference;
+    });
+    return routes[parametricPaths[0]];
+  };
+  var getMatch = (routes, broswerRoute) => {
     const matches = {
       exact: null,
-      parametric: {}
+      parametric: {},
+      fallbacks: {}
     };
+    const currentRoute = broswerRoute !== "/" && broswerRoute.endsWith("/") ? broswerRoute.substring(0, broswerRoute.length - 1) : broswerRoute;
     for (const routeStructure of routes) {
       const [routePath, route] = routeStructure;
       const isFallback = routePath.endsWith("*");
@@ -1089,6 +1172,8 @@ This can lead to unexpected behaviors, because this component can alter other co
         matches.exact = route;
         break;
       }
+      if (!routePath.includes(":") && !routePath.includes("*"))
+        continue;
       const segments = routePath.split("/");
       let regex = "";
       const paramNames = [];
@@ -1097,9 +1182,9 @@ This can lead to unexpected behaviors, because this component can alter other co
         regex += "\\/";
         if (segment.startsWith(":")) {
           if (i === segments.length - 1)
-            regex += "(.*?)";
-          else
             regex += "(.*)";
+          else
+            regex += "(.*?)";
           paramNames.push(segment.substring(1));
         } else if (segment === "*") {
           regex += "(.*)";
@@ -1115,55 +1200,61 @@ This can lead to unexpected behaviors, because this component can alter other co
         for (let i = 1; i < match.length; i++) {
           params[paramNames[i - 1]] = match[i];
         }
-        matches.parametric[routePath] = [route, params];
+        if (isFallback)
+          matches.fallbacks[routePath] = [route, params];
+        else
+          matches.parametric[routePath] = [route, params];
       }
     }
+    const parametricPaths = Object.keys(matches.parametric);
+    const fallbackPaths = Object.keys(matches.fallbacks);
     if (matches.exact) {
       return [matches.exact, {}];
-    } else {
-      const routes2 = matches.parametric;
-      const paths = Object.keys(routes2);
-      paths.sort((a, b) => {
-        const matchA = routes2[a];
-        const matchB = routes2[b];
-        const dynamicsA = Object.keys(matchA).filter((key) => key !== "segments").length;
-        const dynamicsB = Object.keys(matchB).filter((key) => key !== "segments").length;
-        const difference = dynamicsB - dynamicsA;
-        if (difference === 0) {
-          let staticsA = a.split("/");
-          let staticsB = b.split("/");
-          const lengthDifference = staticsB.length - staticsA.length;
-          if (lengthDifference !== 0)
-            return lengthDifference;
-          let staticsALength = 0;
-          let staticsBLength = 0;
-          for (let i = 0; i < staticsA.length; i++) {
-            const sA = staticsA[i];
-            const sB = staticsB[i];
-            if (!sA.startsWith(":"))
-              staticsALength++;
-            if (!sB.startsWith(":"))
-              staticsBLength++;
-            if (sA.startsWith(":") || sB.startsWith(":") || sA.startsWith("*") || sB.startsWith("*"))
-              break;
-          }
-          return staticsBLength - staticsALength;
-        }
-        return difference;
-      });
-      return routes2[paths[0]];
+    } else if (parametricPaths.length) {
+      return getWichParametricRouteisMoreSpecific(matches.parametric);
+    } else if (fallbackPaths.length) {
+      return getWichParametricRouteisMoreSpecific(matches.fallbacks);
     }
+    return [null, null];
   };
-  var RouterContext = createContext({});
+  var getFullPath = (prevRoute, newRoute) => {
+    return newRoute.startsWith("/") ? newRoute : prevRoute + (prevRoute.endsWith("/") ? "" : "/") + newRoute;
+  };
+  var RouterContext = createContext({
+    route: null,
+    params: null,
+    currentRoute: null,
+    setNewRoute: null
+  });
   function Routes({ children }) {
-    const context = useRef({
-      route: null,
-      params: null
-    });
     const [currentRoute, setCurrentRoute] = useState(window.location.pathname);
+    const setNewRoute = useCallback((newRoute, pushState = true) => {
+      setCurrentRoute((prevRoute) => {
+        const nextRoute2 = getFullPath(prevRoute, newRoute);
+        if (pushState && prevRoute !== nextRoute2) {
+          history.pushState({}, null, nextRoute2);
+          context.currentRoute = nextRoute2;
+        }
+        return nextRoute2;
+      });
+    });
+    const context = {
+      route: null,
+      params: null,
+      currentRoute,
+      setNewRoute
+    };
     const treeStructure = useMemo(() => buildTreeStructure(children.nodes), []);
     const routes = useMemo(() => getRoutes(treeStructure), []);
+    useEffect(() => {
+      window.addEventListener("popstate", () => {
+        setNewRoute(window.location.pathname, false);
+      });
+    }, []);
     const [route, params] = getMatch(routes, currentRoute);
+    context.params = params;
+    if (!route)
+      return /* @__PURE__ */ jsx("div", { children: "Not found!" });
     let root = route;
     let nextRoute = null;
     root.nextRoute = nextRoute;
@@ -1172,40 +1263,74 @@ This can lead to unexpected behaviors, because this component can alter other co
       root = root.parent;
       root.nextRoute = nextRoute;
     }
-    context.current = {
-      ...context.current,
-      route: root,
-      params
-    };
-    return /* @__PURE__ */ jsx(RouterContext.Provider, { value: context.current, children: root.element });
+    context.route = root;
+    return /* @__PURE__ */ jsx(RouterContext.Provider, { value: context, children: /* @__PURE__ */ jsx(SingleRouteContext.Provider, { value: root, children: root?.element }) });
   }
   defineWomp(Routes, {
     name: "womp-routes"
   });
-  function ChildRoute() {
-    const routerContext = useContext(RouterContext);
-    if (routerContext && routerContext.route) {
-      const route = routerContext.route;
-      const newRoute = route.nextRoute;
-      if (newRoute) {
-        routerContext.route = newRoute;
-        return newRoute.element;
-      } else if (route.index) {
-        routerContext.route = null;
-        return route.index.element;
-      }
-    }
-    return null;
-  }
-  defineWomp(ChildRoute, {
-    name: "child-route"
-  });
-  function Route(props) {
-    return /* @__PURE__ */ jsx("div", {});
+  var SingleRouteContext = createContext(null);
+  function Route({ route }) {
+    return /* @__PURE__ */ jsx(Fragment, {});
   }
   defineWomp(Route, {
     name: "womp-route"
   });
+  function ChildRoute() {
+    const routerContext = useContext(RouterContext);
+    let toRender = null;
+    const route = routerContext.route;
+    if (routerContext) {
+      const newRoute = route.nextRoute;
+      if (newRoute) {
+        toRender = newRoute;
+      } else if (route.index) {
+        toRender = route.index;
+      }
+    }
+    routerContext.route = toRender;
+    return /* @__PURE__ */ jsx(SingleRouteContext.Provider, { value: toRender, children: toRender?.element });
+  }
+  defineWomp(ChildRoute, {
+    name: "womp-child-route"
+  });
+  function Link({ to, children }) {
+    const navigate = useNavigate();
+    const route = useContext(SingleRouteContext);
+    let href = to;
+    if (!href.startsWith("/")) {
+      let parentRoute = route;
+      while (parentRoute) {
+        const parentPath = parentRoute.path;
+        if (parentPath) {
+          const slash = !parentPath.endsWith("/") ? "/" : "";
+          href = parentRoute.path + slash + href;
+        }
+        parentRoute = parentRoute.parent;
+      }
+    }
+    const onLinkClick = (ev) => {
+      ev.preventDefault();
+      navigate(href);
+    };
+    return /* @__PURE__ */ jsx("a", { href, onClick: onLinkClick, children });
+  }
+  Link.css = `
+	:host {
+		display: inline-block;
+	}
+`;
+  defineWomp(Link, {
+    name: "womp-link"
+  });
+  var useParams = () => {
+    const routerContext = useContext(RouterContext);
+    return routerContext.params;
+  };
+  var useNavigate = () => {
+    const routerContext = useContext(RouterContext);
+    return routerContext.setNewRoute;
+  };
 
   // src/App.tsx
   var Teams = () => {
@@ -1216,30 +1341,64 @@ This can lead to unexpected behaviors, because this component can alter other co
   };
   defineWomp(Teams);
   var Root = () => {
+    const [counter, setCounter] = useState(0);
     return /* @__PURE__ */ jsxs("div", { children: [
-      /* @__PURE__ */ jsx("p", { children: "Root!!" }),
-      /* @__PURE__ */ jsx(ChildRoute, {})
+      /* @__PURE__ */ jsxs("p", { children: [
+        /* @__PURE__ */ jsxs("button", { onClick: () => setCounter(counter + 1), children: [
+          "Inc ",
+          counter
+        ] }),
+        "Root!! ",
+        /* @__PURE__ */ jsx(Link, { to: "teams", children: "Vai a Teams" }),
+        /* @__PURE__ */ jsx(Link, { to: "/", children: "Vai a Root" })
+      ] }),
+      /* @__PURE__ */ jsx(ChildRoute, {}),
+      /* @__PURE__ */ jsx("p", { children: /* @__PURE__ */ jsx(Link, { to: "teams", children: "Vai a Teams" }) })
     ] });
   };
   defineWomp(Root);
   var Team = () => {
-    return /* @__PURE__ */ jsx("div", { children: /* @__PURE__ */ jsx("p", { children: "Team singolo!!" }) });
+    const { teamId } = useParams();
+    const navigate = useNavigate();
+    useEffect(() => {
+      setTimeout(() => {
+        navigate("/");
+      }, 4e3);
+    }, []);
+    return /* @__PURE__ */ jsxs("div", { children: [
+      /* @__PURE__ */ jsxs("p", { children: [
+        "Team singolo ",
+        teamId,
+        "!!"
+      ] }),
+      /* @__PURE__ */ jsx("p", { children: "In 4 seconds you'll go in the home!!!" }),
+      /* @__PURE__ */ jsx(Link, { to: "/teams/200", children: "200!" })
+    ] });
   };
   defineWomp(Team);
   function App({ children }) {
     return /* @__PURE__ */ jsxs(Routes, { children: [
       /* @__PURE__ */ jsxs(Route, { path: "/", element: /* @__PURE__ */ jsx(Root, {}), children: [
-        /* @__PURE__ */ jsx(Route, { index: true, element: /* @__PURE__ */ jsx("div", {}) }),
-        /* @__PURE__ */ jsx(Route, { path: ":boh", element: /* @__PURE__ */ jsx("div", {}), children: /* @__PURE__ */ jsx(Route, { path: ":teamId/members/coaches", element: /* @__PURE__ */ jsx("div", {}) }) }),
+        /* @__PURE__ */ jsx(Route, { index: true, element: /* @__PURE__ */ jsx("i", { children: "L'index della home" }) }),
+        /* @__PURE__ */ jsx(Route, { path: ":boh", element: /* @__PURE__ */ jsx("div", { children: "BOH!" }), children: /* @__PURE__ */ jsx(Route, { path: ":teamId/members/coaches", element: /* @__PURE__ */ jsx("div", { children: "Non si vede!" }) }) }),
         /* @__PURE__ */ jsxs(Route, { path: "teams", element: /* @__PURE__ */ jsx(Teams, {}), children: [
-          /* @__PURE__ */ jsx(Route, { path: "*", element: /* @__PURE__ */ jsx("div", {}) }),
+          /* @__PURE__ */ jsx(Route, { path: "*", element: /* @__PURE__ */ jsx("i", { children: "Fallbackkkk" }) }),
           /* @__PURE__ */ jsx(Route, { path: ":teamId", element: /* @__PURE__ */ jsx(Team, {}) }),
           /* @__PURE__ */ jsx(Route, { path: ":teamId/members/*", element: /* @__PURE__ */ jsx("div", {}) }),
           /* @__PURE__ */ jsx(Route, { path: ":teamId/members/coaches", element: /* @__PURE__ */ jsx("div", {}) }),
           /* @__PURE__ */ jsx(Route, { path: ":teamId/members/:param", element: /* @__PURE__ */ jsx("div", {}) }),
           /* @__PURE__ */ jsx(Route, { path: ":teamId/edit", element: /* @__PURE__ */ jsx("div", {}) }),
           /* @__PURE__ */ jsx(Route, { path: "new", element: /* @__PURE__ */ jsx("div", {}) }),
-          /* @__PURE__ */ jsx(Route, { index: true, element: /* @__PURE__ */ jsx("div", { children: "Bro dai seleziona un team" }) })
+          /* @__PURE__ */ jsx(
+            Route,
+            {
+              index: true,
+              element: /* @__PURE__ */ jsxs("u", { children: [
+                "Bro dai seleziona un team",
+                /* @__PURE__ */ jsx(Link, { to: "90", children: "90" })
+              ] })
+            }
+          )
         ] })
       ] }),
       /* @__PURE__ */ jsxs(Route, { element: /* @__PURE__ */ jsx("div", {}), children: [
@@ -1253,4 +1412,10 @@ This can lead to unexpected behaviors, because this component can alter other co
 })();
 //! Can cause problems. You should put also the "s" modifier
 //! Some valid selectors are marked as invalid e.g. :host/componentName, @media, etc.
-//! Find another way to quickly compare 2 renderHtml results
+//! For each hook, if the hook is !null && has a cleanupFunction, execute it.
+//! This beacuse timers will continue it's execution also after the component has been
+//! Disconnected
+//! Create a compare htmlTemplates function which will compare each part and return false
+//! in the first non-match (better than stringifying the whole templates and compare them).
+//! Use it also on __setValues.
+//! Make custom component. Allow to override it.
