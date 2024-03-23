@@ -13,6 +13,7 @@ import {
 	useMemo,
 	useState,
 	Suspense,
+	html,
 } from 'womp';
 
 /* 
@@ -176,21 +177,21 @@ const getFullPath = (prevRoute: string, newRoute: string) => {
 };
 
 const getRouteContent = (route: RouteStructure) => {
-	return (
-		<SingleRouteContext.Provider value={route}>
-			{route.lazy ? (
-				route.fallback ? (
-					<Suspense fallback={route.fallback}>
-						<route.lazy />
-					</Suspense>
-				) : (
-					<route.lazy />
-				)
-			) : (
-				route?.element
-			)}
+	return html`
+		<${SingleRouteContext.Provider} value=${route}>
+			${
+				route.lazy
+					? route.fallback
+						? html`
+								<Suspense fallback="{route.fallback}">
+									<route.lazy />
+								</Suspense>
+						  `
+						: html`<route.lazy />`
+					: route?.element
+			}
 		</SingleRouteContext.Provider>
-	);
+	`;
 };
 
 /* 
@@ -256,7 +257,7 @@ export function Routes({ children }: RoutesProps) {
 	const [route, params] = getMatch(routes, currentRoute);
 	context.params = params;
 
-	if (!route) return <div>Not found!</div>; //! Make custom component. Allow to override it.
+	if (!route) return html`<div>Not found!</div>`; //! Make custom component. Allow to override it.
 	let root = route;
 	let nextRoute = null;
 	root.nextRoute = nextRoute;
@@ -266,7 +267,9 @@ export function Routes({ children }: RoutesProps) {
 		root.nextRoute = nextRoute;
 	}
 	context.route = root;
-	return <RouterContext.Provider value={context}>{getRouteContent(root)}</RouterContext.Provider>;
+	return html`<${RouterContext.Provider} value=${context}>${getRouteContent(root)}</${
+		RouterContext.Provider
+	}>`;
 }
 
 defineWomp(Routes, {
@@ -291,7 +294,7 @@ interface RouteProps extends WompProps {
 }
 
 export function Route({ route }: RouteProps) {
-	return <></>;
+	return html``;
 }
 
 defineWomp(Route, {
@@ -351,11 +354,7 @@ export function Link({ to, children }: LinkProps) {
 		ev.preventDefault();
 		navigate(href);
 	};
-	return (
-		<a href={href} onClick={onLinkClick}>
-			{children}
-		</a>
-	);
+	return html`<a href=${href} @click=${onLinkClick}>${children}</a> `;
 }
 Link.css = ` :host { display: inline-block; } `;
 

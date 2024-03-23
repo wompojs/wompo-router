@@ -12,6 +12,6 @@
 		"emitDeclarationOnly": true,
 		"declarationDir": "./ts"
 	},
-	"include": ["./ts/womp-router.tsx"],
+	"include": ["ts/womp-router.ts"],
 	"exclude": ["dist"]
 }

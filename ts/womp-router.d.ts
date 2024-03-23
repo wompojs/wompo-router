@@ -11,7 +11,7 @@ interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'>
     fallback: RenderHtml;
     lazy: LazyResult;
 }
-export declare function Routes({ children }: RoutesProps): any;
+export declare function Routes({ children }: RoutesProps): RenderHtml;
 interface RouteProps extends WompProps {
     path?: string;
     index?: boolean;
@@ -20,12 +20,12 @@ interface RouteProps extends WompProps {
     fallback?: RenderHtml;
     route?: RouteStructure;
 }
-export declare function Route({ route }: RouteProps): any;
-export declare function ChildRoute(): any;
+export declare function Route({ route }: RouteProps): RenderHtml;
+export declare function ChildRoute(): RenderHtml;
 interface LinkProps extends WompProps {
     to: string;
 }
-export declare function Link({ to, children }: LinkProps): any;
+export declare function Link({ to, children }: LinkProps): RenderHtml;
 export declare namespace Link {
     var css: string;
 }
