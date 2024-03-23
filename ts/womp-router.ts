@@ -183,14 +183,14 @@ const getRouteContent = (route: RouteStructure) => {
 				route.lazy
 					? route.fallback
 						? html`
-								<Suspense fallback="{route.fallback}">
-									<route.lazy />
-								</Suspense>
+								<${Suspense} fallback=${route.fallback}>
+									<${route.lazy} />
+								</${Suspense}>
 						  `
-						: html`<route.lazy />`
+						: html`<${route.lazy} />`
 					: route?.element
 			}
-		</SingleRouteContext.Provider>
+		</${SingleRouteContext.Provider}>
 	`;
 };
 
