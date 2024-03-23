@@ -1,14 +1,18 @@
 import {
+	type LazyCallbackResult,
+	type LazyResult,
 	RenderHtml,
 	WompComponent,
 	WompProps,
 	createContext,
 	defineWomp,
+	lazy,
 	useCallback,
 	useContext,
 	useEffect,
 	useMemo,
 	useState,
+	Suspense,
 } from 'womp';
 
 /* 
@@ -29,7 +33,8 @@ const buildTreeStructure = (
 				parent: parent,
 				element: props.element,
 				path: props.path,
-				lazy: props.lazy,
+				lazy: props.lazy ? lazy(props.lazy) : null,
+				fallback: props.fallback,
 				index: null,
 				children: [],
 			};
@@ -170,10 +175,23 @@ const getFullPath = (prevRoute: string, newRoute: string) => {
 		: prevRoute + (prevRoute.endsWith('/') ? '' : '/') + newRoute;
 };
 
-/* function Await({resolve, errorElement,}: any){
-	return 
-}
-defineWomp(Await) */
+const getRouteContent = (route: RouteStructure) => {
+	return (
+		<SingleRouteContext.Provider value={route}>
+			{route.lazy ? (
+				route.fallback ? (
+					<Suspense fallback={route.fallback}>
+						<route.lazy />
+					</Suspense>
+				) : (
+					<route.lazy />
+				)
+			) : (
+				route?.element
+			)}
+		</SingleRouteContext.Provider>
+	);
+};
 
 /* 
 ================================================================
@@ -182,13 +200,15 @@ ROUTES
 */
 interface RoutesProps extends WompProps {}
 
-interface RouteStructure extends Omit<RouteProps, 'index' | 'children'> {
+interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'> {
 	parent: RouteStructure;
 	element: RenderHtml;
 	path: string;
 	children: RouteStructure[];
 	index: RouteStructure;
 	nextRoute?: RouteStructure;
+	fallback: RenderHtml;
+	lazy: LazyResult;
 }
 
 interface RouterContext {
@@ -246,11 +266,7 @@ export function Routes({ children }: RoutesProps) {
 		root.nextRoute = nextRoute;
 	}
 	context.route = root;
-	return (
-		<RouterContext.Provider value={context}>
-			<SingleRouteContext.Provider value={root}>{root?.element}</SingleRouteContext.Provider>
-		</RouterContext.Provider>
-	);
+	return <RouterContext.Provider value={context}>{getRouteContent(root)}</RouterContext.Provider>;
 }
 
 defineWomp(Routes, {
@@ -269,7 +285,8 @@ interface RouteProps extends WompProps {
 	path?: string;
 	index?: boolean;
 	element?: RenderHtml;
-	lazy?: () => Promise<any>;
+	lazy?: () => LazyCallbackResult;
+	fallback?: RenderHtml;
 	route?: RouteStructure;
 }
 
@@ -299,9 +316,7 @@ export function ChildRoute() {
 		}
 	}
 	routerContext.route = toRender;
-	return (
-		<SingleRouteContext.Provider value={toRender}>{toRender?.element}</SingleRouteContext.Provider>
-	);
+	return getRouteContent(toRender);
 }
 
 defineWomp(ChildRoute, {
@@ -342,11 +357,7 @@ export function Link({ to, children }: LinkProps) {
 		</a>
 	);
 }
-Link.css = `
-	:host {
-		display: inline-block;
-	}
-`;
+Link.css = ` :host { display: inline-block; } `;
 
 defineWomp(Link, {
 	name: 'womp-link',

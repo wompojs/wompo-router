@@ -1,18 +1,27 @@
 {
-  "name": "womp-router",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "dev": "esbuild src/App.tsx --outdir=dist --bundle --watch --allow-overwrite",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "womp": "../womp"
-  },
-  "devDependencies": {
+	"author": "Lorenzo Lannino",
+	"license": "ISC",
+	"name": "womp-router",
+	"description": "",
+	"version": "1.0.0",
+	"type": "module",
+	"module": "./dist/womp-router.js",
+	"main": "./dist/womp-router.js",
+	"types": "./ts/womp-router.d.ts",
+	"scripts": {
+		"build": "tsc & esbuild ts/womp-router.tsx --minify --outdir=dist --allow-overwrite",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"exports": {
+		".": {
+			"types": "./ts/womp-router.d.ts",
+			"default": "./dist/womp-router.js"
+		}
+	},
+	"dependencies": {
+		"womp": "../womp"
+	},
+	"devDependencies": {
 		"esbuild": "0.20.1",
 		"ts-loader": "^9.4.3"
 	}
