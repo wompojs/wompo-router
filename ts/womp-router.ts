@@ -14,6 +14,7 @@ import {
 	useState,
 	Suspense,
 	html,
+	useRef,
 } from 'womp';
 
 /* 
@@ -29,6 +30,7 @@ const buildTreeStructure = (
 	childNodes.forEach((child) => {
 		if (child instanceof (Route as WompComponent).class) {
 			const props = child.props as RouteProps;
+			console.log(props);
 			const route: RouteStructure = {
 				...props,
 				parent: parent,
@@ -160,14 +162,21 @@ const getMatch = (
 	}
 	const parametricPaths = Object.keys(matches.parametric);
 	const fallbackPaths = Object.keys(matches.fallbacks);
+	let match: [RouteStructure, Params] = [null, null];
 	if (matches.exact) {
-		return [matches.exact, {}];
+		match = [matches.exact, {}];
 	} else if (parametricPaths.length) {
-		return getWichParametricRouteisMoreSpecific(matches.parametric);
+		match = getWichParametricRouteisMoreSpecific(matches.parametric);
 	} else if (fallbackPaths.length) {
-		return getWichParametricRouteisMoreSpecific(matches.fallbacks);
+		match = getWichParametricRouteisMoreSpecific(matches.fallbacks);
 	}
-	return [null, null];
+	const redirect = match[0].redirect || match[0].index?.redirect;
+	if (redirect) {
+		const newPath = getFullPath(broswerRoute, redirect);
+		history.replaceState({}, undefined, newPath);
+		match = getMatch(routes, newPath);
+	}
+	return match;
 };
 
 const getFullPath = (prevRoute: string, newRoute: string) => {
@@ -177,18 +186,19 @@ const getFullPath = (prevRoute: string, newRoute: string) => {
 };
 
 const getRouteContent = (route: RouteStructure) => {
+	if (!route) return null;
 	return html`
-		<${SingleRouteContext.Provider} value=${route}>
+		<${SingleRouteContext.Provider} value=${{ ...route }}>
 			${
 				route.lazy
 					? route.fallback
 						? html`
-								<${Suspense} fallback=${route.fallback}>
-									<${route.lazy} />
-								</${Suspense}>
-						  `
+							<${Suspense} fallback=${route.fallback}>
+								<${route.lazy} />
+							</${Suspense}>
+						`
 						: html`<${route.lazy} />`
-					: route?.element
+					: route.element
 			}
 		</${SingleRouteContext.Provider}>
 	`;
@@ -227,24 +237,27 @@ const RouterContext = createContext<RouterContext>({
 
 export function Routes({ children }: RoutesProps) {
 	const [currentRoute, setCurrentRoute] = useState(window.location.pathname);
+	const context = useRef<RouterContext>({
+		route: null,
+		params: null,
+		currentRoute: null,
+		setNewRoute: null,
+	});
 
 	const setNewRoute = useCallback((newRoute: string, pushState: boolean = true) => {
 		setCurrentRoute((prevRoute) => {
 			const nextRoute = getFullPath(prevRoute, newRoute);
 			if (pushState && prevRoute !== nextRoute) {
 				history.pushState({}, null, nextRoute);
-				context.currentRoute = nextRoute;
+				context.current.currentRoute = nextRoute;
 			}
 			return nextRoute;
 		});
 	});
 
-	const context: RouterContext = {
-		route: null,
-		params: null,
-		currentRoute: currentRoute,
-		setNewRoute,
-	};
+	context.current.currentRoute = currentRoute;
+	context.current.setNewRoute = setNewRoute;
+
 	const treeStructure = useMemo(() => buildTreeStructure(children.nodes), []);
 	const routes: [string, RouteStructure][] = useMemo(() => getRoutes(treeStructure), []);
 
@@ -255,7 +268,7 @@ export function Routes({ children }: RoutesProps) {
 	}, []);
 
 	const [route, params] = getMatch(routes, currentRoute);
-	context.params = params;
+	context.current.params = params;
 
 	if (!route) return html`<div>Not found!</div>`; //! Make custom component. Allow to override it.
 	let root = route;
@@ -266,8 +279,8 @@ export function Routes({ children }: RoutesProps) {
 		root = root.parent;
 		root.nextRoute = nextRoute;
 	}
-	context.route = root;
-	return html`<${RouterContext.Provider} value=${context}>${getRouteContent(root)}</${
+	context.current.route = root;
+	return html`<${RouterContext.Provider} value=${context.current}>${getRouteContent(root)}</${
 		RouterContext.Provider
 	}>`;
 }
@@ -287,6 +300,7 @@ const SingleRouteContext = createContext<RouteStructure>(null);
 interface RouteProps extends WompProps {
 	path?: string;
 	index?: boolean;
+	redirect?: string;
 	element?: RenderHtml;
 	lazy?: () => LazyCallbackResult;
 	fallback?: RenderHtml;
@@ -307,10 +321,9 @@ CHILD-ROUTE
 ================================================================
 */
 export function ChildRoute() {
-	const routerContext = useContext(RouterContext);
+	const route = useContext(SingleRouteContext);
 	let toRender: RouteStructure = null;
-	const route = routerContext.route;
-	if (routerContext) {
+	if (route) {
 		const newRoute = route.nextRoute;
 		if (newRoute) {
 			toRender = newRoute;
@@ -318,7 +331,6 @@ export function ChildRoute() {
 			toRender = route.index;
 		}
 	}
-	routerContext.route = toRender;
 	return getRouteContent(toRender);
 }
 
@@ -364,6 +376,40 @@ defineWomp(Link, {
 
 /* 
 ================================================================
+NAV-LINK
+================================================================
+*/
+export function NavLink({ to, children }: LinkProps) {
+	const navigate = useNavigate();
+	const currentRoute = useCurrentRoute();
+	const route = useContext(SingleRouteContext);
+	let href = to;
+	if (!href.startsWith('/')) {
+		let parentRoute = route;
+		while (parentRoute) {
+			const parentPath = parentRoute.path;
+			if (parentPath) {
+				const slash = !parentPath.endsWith('/') ? '/' : '';
+				href = parentRoute.path + slash + href;
+			}
+			parentRoute = parentRoute.parent;
+		}
+	}
+	const onLinkClick = (ev: Event) => {
+		ev.preventDefault();
+		navigate(href);
+	};
+	const isActive = currentRoute === href;
+	return html`<a class=${isActive && 'active'} href=${href} @click=${onLinkClick}>${children}</a>`;
+}
+NavLink.css = ` :host { display: inline-block; } `;
+
+defineWomp(NavLink, {
+	name: 'womp-nav-link',
+});
+
+/* 
+================================================================
 HOOKS
 ================================================================
 */
@@ -375,4 +421,9 @@ export const useParams = () => {
 export const useNavigate = () => {
 	const routerContext = useContext(RouterContext);
 	return routerContext.setNewRoute;
+};
+
+export const useCurrentRoute = () => {
+	const routerContext = useContext(RouterContext);
+	return routerContext.currentRoute;
 };

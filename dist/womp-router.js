@@ -1,10 +1,305 @@
-import{createContext as S,defineWomp as k,lazy as L,useCallback as v,useContext as y,useEffect as N,useMemo as b,useState as B,Suspense as W,html as d}from"womp";const C=(t,e=[],n=null)=>(t.forEach(s=>{if(s instanceof Route.class){const r=s.props,a={...r,parent:n,element:r.element,path:r.path,lazy:r.lazy?L(r.lazy):null,fallback:r.fallback,index:null,children:[]};r.index&&(n.index=a),e.push(a),C(s.childNodes,a.children,a)}}),e),$=(t,e=[],n="")=>{for(const s of t){let r="";if(s.path){const a=n&&!n.endsWith("/")||!n&&!s.path.startsWith("/")?"/":"";r+=n+a+s.path,e.push([r,s])}s.children&&$(s.children,e,r)}return e},w=t=>{const e=Object.keys(t);return e.sort((n,s)=>{const r=t[n],a=t[s],c=Object.keys(r).filter(o=>o!=="segments").length,f=Object.keys(a).filter(o=>o!=="segments").length-c;if(f===0){let o=n.split("/"),m=s.split("/");const h=m.length-o.length;if(h!==0)return h;let R=0,g=0;for(let l=0;l<o.length;l++){const p=o[l],i=m[l];if(p.startsWith(":")||R++,i.startsWith(":")||g++,p.startsWith(":")||i.startsWith(":")||p.startsWith("*")||i.startsWith("*"))break}return g-R}return f}),t[e[0]]},O=(t,e)=>{const n={exact:null,parametric:{},fallbacks:{}},s=e!=="/"&&e.endsWith("/")?e.substring(0,e.length-1):e;for(const c of t){const[u,f]=c,o=u.endsWith("*");if(!o&&u.split("/").length!==s.split("/").length)continue;if(u===s){n.exact=f;break}if(!u.includes(":")&&!u.includes("*"))continue;const m=u.split("/");let h="";const R=[];for(let p=1;p<m.length;p++){const i=m[p];h+="\\/",i.startsWith(":")?(p===m.length-1?h+="(.*)":h+="(.*?)",R.push(i.substring(1))):i==="*"?(h+="(.*)",R.push("segments")):h+=i}const l=new RegExp(h,"g").exec(s);if(l){const p={};for(let i=1;i<l.length;i++)p[R[i-1]]=l[i];o?n.fallbacks[u]=[f,p]:n.parametric[u]=[f,p]}}const r=Object.keys(n.parametric),a=Object.keys(n.fallbacks);return n.exact?[n.exact,{}]:r.length?w(n.parametric):a.length?w(n.fallbacks):[null,null]},j=(t,e)=>e.startsWith("/")?e:t+(t.endsWith("/")?"":"/")+e,z=t=>d`
-		<${P.Provider} value=${t}>
-			${t.lazy?t.fallback?d`
-								<${W} fallback=${t.fallback}>
-									<${t.lazy} />
-								</${W}>
-						  `:d`<${t.lazy} />`:t?.element}
-		</${P.Provider}>
-	`,x=S({route:null,params:null,currentRoute:null,setNewRoute:null});export function Routes({children:t}){const[e,n]=B(window.location.pathname),s=v((h,R=!0)=>{n(g=>{const l=j(g,h);return R&&g!==l&&(history.pushState({},null,l),r.currentRoute=l),l})}),r={route:null,params:null,currentRoute:e,setNewRoute:s},a=b(()=>C(t.nodes),[]),c=b(()=>$(a),[]);N(()=>{window.addEventListener("popstate",()=>{s(window.location.pathname,!1)})},[]);const[u,f]=O(c,e);if(r.params=f,!u)return d`<div>Not found!</div>`;//! Make custom component. Allow to override it.
-let o=u,m=null;for(o.nextRoute=m;o.parent;)m=o,o=o.parent,o.nextRoute=m;return r.route=o,d`<${x.Provider} value=${r}>${z(o)}</${x.Provider}>`}k(Routes,{name:"womp-routes"});const P=S(null);export function Route({route:t}){return d``}k(Route,{name:"womp-route"});export function ChildRoute(){const t=y(x);let e=null;const n=t.route;if(t){const s=n.nextRoute;s?e=s:n.index&&(e=n.index)}return t.route=e,z(e)}k(ChildRoute,{name:"womp-child-route"});export function Link({to:t,children:e}){const n=useNavigate(),s=y(P);let r=t;if(!r.startsWith("/")){let c=s;for(;c;){const u=c.path;if(u){const f=u.endsWith("/")?"":"/";r=c.path+f+r}c=c.parent}}return d`<a href=${r} @click=${c=>{c.preventDefault(),n(r)}}>${e}</a> `}Link.css=" :host { display: inline-block; } ",k(Link,{name:"womp-link"});export const useParams=()=>y(x).params,useNavigate=()=>y(x).setNewRoute;
+import {
+  createContext,
+  defineWomp,
+  lazy,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  Suspense,
+  html,
+  useRef
+} from "womp";
+const buildTreeStructure = (childNodes, structure = [], parent = null) => {
+  childNodes.forEach((child) => {
+    if (child instanceof Route.class) {
+      const props = child.props;
+      console.log(props);
+      const route = {
+        ...props,
+        parent,
+        element: props.element,
+        path: props.path,
+        lazy: props.lazy ? lazy(props.lazy) : null,
+        fallback: props.fallback,
+        index: null,
+        children: []
+      };
+      if (props.index)
+        parent.index = route;
+      structure.push(route);
+      buildTreeStructure(child.childNodes, route.children, route);
+    }
+  });
+  return structure;
+};
+const getRoutes = (treeStructure, paths = [], parent = "") => {
+  for (const route of treeStructure) {
+    let newRoute = "";
+    if (route.path) {
+      const slash = parent && !parent.endsWith("/") || !parent && !route.path.startsWith("/") ? "/" : "";
+      newRoute += parent + slash + route.path;
+      paths.push([newRoute, route]);
+    }
+    if (route.children) {
+      getRoutes(route.children, paths, newRoute);
+    }
+  }
+  return paths;
+};
+const getWichParametricRouteisMoreSpecific = (routes) => {
+  const parametricPaths = Object.keys(routes);
+  parametricPaths.sort((a, b) => {
+    const matchA = routes[a];
+    const matchB = routes[b];
+    const dynamicsA = Object.keys(matchA).filter((key) => key !== "segments").length;
+    const dynamicsB = Object.keys(matchB).filter((key) => key !== "segments").length;
+    const difference = dynamicsB - dynamicsA;
+    if (difference === 0) {
+      let staticsA = a.split("/");
+      let staticsB = b.split("/");
+      const lengthDifference = staticsB.length - staticsA.length;
+      if (lengthDifference !== 0)
+        return lengthDifference;
+      let staticsALength = 0;
+      let staticsBLength = 0;
+      for (let i = 0; i < staticsA.length; i++) {
+        const sA = staticsA[i];
+        const sB = staticsB[i];
+        if (!sA.startsWith(":"))
+          staticsALength++;
+        if (!sB.startsWith(":"))
+          staticsBLength++;
+        if (sA.startsWith(":") || sB.startsWith(":") || sA.startsWith("*") || sB.startsWith("*"))
+          break;
+      }
+      return staticsBLength - staticsALength;
+    }
+    return difference;
+  });
+  return routes[parametricPaths[0]];
+};
+const getMatch = (routes, broswerRoute) => {
+  const matches = {
+    exact: null,
+    parametric: {},
+    fallbacks: {}
+  };
+  const currentRoute = broswerRoute !== "/" && broswerRoute.endsWith("/") ? broswerRoute.substring(0, broswerRoute.length - 1) : broswerRoute;
+  for (const routeStructure of routes) {
+    const [routePath, route] = routeStructure;
+    const isFallback = routePath.endsWith("*");
+    if (!isFallback && routePath.split("/").length !== currentRoute.split("/").length)
+      continue;
+    if (routePath === currentRoute) {
+      matches.exact = route;
+      break;
+    }
+    if (!routePath.includes(":") && !routePath.includes("*"))
+      continue;
+    const segments = routePath.split("/");
+    let regex = "";
+    const paramNames = [];
+    for (let i = 1; i < segments.length; i++) {
+      const segment = segments[i];
+      regex += "\\/";
+      if (segment.startsWith(":")) {
+        if (i === segments.length - 1)
+          regex += "(.*)";
+        else
+          regex += "(.*?)";
+        paramNames.push(segment.substring(1));
+      } else if (segment === "*") {
+        regex += "(.*)";
+        paramNames.push("segments");
+      } else {
+        regex += segment;
+      }
+    }
+    const matchRegex = new RegExp(regex, "g");
+    const match2 = matchRegex.exec(currentRoute);
+    if (match2) {
+      const params = {};
+      for (let i = 1; i < match2.length; i++) {
+        params[paramNames[i - 1]] = match2[i];
+      }
+      if (isFallback)
+        matches.fallbacks[routePath] = [route, params];
+      else
+        matches.parametric[routePath] = [route, params];
+    }
+  }
+  const parametricPaths = Object.keys(matches.parametric);
+  const fallbackPaths = Object.keys(matches.fallbacks);
+  let match = [null, null];
+  if (matches.exact) {
+    match = [matches.exact, {}];
+  } else if (parametricPaths.length) {
+    match = getWichParametricRouteisMoreSpecific(matches.parametric);
+  } else if (fallbackPaths.length) {
+    match = getWichParametricRouteisMoreSpecific(matches.fallbacks);
+  }
+  const redirect = match[0].redirect || match[0].index?.redirect;
+  if (redirect) {
+    const newPath = getFullPath(broswerRoute, redirect);
+    history.replaceState({}, void 0, newPath);
+    match = getMatch(routes, newPath);
+  }
+  return match;
+};
+const getFullPath = (prevRoute, newRoute) => {
+  return newRoute.startsWith("/") ? newRoute : prevRoute + (prevRoute.endsWith("/") ? "" : "/") + newRoute;
+};
+const getRouteContent = (route) => {
+  if (!route)
+    return null;
+  return html`
+		<${SingleRouteContext.Provider} value=${{ ...route }}>
+			${route.lazy ? route.fallback ? html`
+							<${Suspense} fallback=${route.fallback}>
+								<${route.lazy} />
+							</${Suspense}>
+						` : html`<${route.lazy} />` : route.element}
+		</${SingleRouteContext.Provider}>
+	`;
+};
+const RouterContext = createContext({
+  route: null,
+  params: null,
+  currentRoute: null,
+  setNewRoute: null
+});
+export function Routes({ children }) {
+  const [currentRoute, setCurrentRoute] = useState(window.location.pathname);
+  const context = useRef({
+    route: null,
+    params: null,
+    currentRoute: null,
+    setNewRoute: null
+  });
+  const setNewRoute = useCallback((newRoute, pushState = true) => {
+    setCurrentRoute((prevRoute) => {
+      const nextRoute2 = getFullPath(prevRoute, newRoute);
+      if (pushState && prevRoute !== nextRoute2) {
+        history.pushState({}, null, nextRoute2);
+        context.current.currentRoute = nextRoute2;
+      }
+      return nextRoute2;
+    });
+  });
+  context.current.currentRoute = currentRoute;
+  context.current.setNewRoute = setNewRoute;
+  const treeStructure = useMemo(() => buildTreeStructure(children.nodes), []);
+  const routes = useMemo(() => getRoutes(treeStructure), []);
+  useEffect(() => {
+    window.addEventListener("popstate", () => {
+      setNewRoute(window.location.pathname, false);
+    });
+  }, []);
+  const [route, params] = getMatch(routes, currentRoute);
+  context.current.params = params;
+  if (!route)
+    return html`<div>Not found!</div>`;
+  //! Make custom component. Allow to override it.
+  let root = route;
+  let nextRoute = null;
+  root.nextRoute = nextRoute;
+  while (root.parent) {
+    nextRoute = root;
+    root = root.parent;
+    root.nextRoute = nextRoute;
+  }
+  context.current.route = root;
+  return html`<${RouterContext.Provider} value=${context.current}>${getRouteContent(root)}</${RouterContext.Provider}>`;
+}
+defineWomp(Routes, {
+  name: "womp-routes"
+});
+const SingleRouteContext = createContext(null);
+export function Route({ route }) {
+  return html``;
+}
+defineWomp(Route, {
+  name: "womp-route"
+});
+export function ChildRoute() {
+  const route = useContext(SingleRouteContext);
+  let toRender = null;
+  if (route) {
+    const newRoute = route.nextRoute;
+    if (newRoute) {
+      toRender = newRoute;
+    } else if (route.index) {
+      toRender = route.index;
+    }
+  }
+  return getRouteContent(toRender);
+}
+defineWomp(ChildRoute, {
+  name: "womp-child-route"
+});
+export function Link({ to, children }) {
+  const navigate = useNavigate();
+  const route = useContext(SingleRouteContext);
+  let href = to;
+  if (!href.startsWith("/")) {
+    let parentRoute = route;
+    while (parentRoute) {
+      const parentPath = parentRoute.path;
+      if (parentPath) {
+        const slash = !parentPath.endsWith("/") ? "/" : "";
+        href = parentRoute.path + slash + href;
+      }
+      parentRoute = parentRoute.parent;
+    }
+  }
+  const onLinkClick = (ev) => {
+    ev.preventDefault();
+    navigate(href);
+  };
+  return html`<a href=${href} @click=${onLinkClick}>${children}</a> `;
+}
+Link.css = ` :host { display: inline-block; } `;
+defineWomp(Link, {
+  name: "womp-link"
+});
+export function NavLink({ to, children }) {
+  const navigate = useNavigate();
+  const currentRoute = useCurrentRoute();
+  const route = useContext(SingleRouteContext);
+  let href = to;
+  if (!href.startsWith("/")) {
+    let parentRoute = route;
+    while (parentRoute) {
+      const parentPath = parentRoute.path;
+      if (parentPath) {
+        const slash = !parentPath.endsWith("/") ? "/" : "";
+        href = parentRoute.path + slash + href;
+      }
+      parentRoute = parentRoute.parent;
+    }
+  }
+  const onLinkClick = (ev) => {
+    ev.preventDefault();
+    navigate(href);
+  };
+  const isActive = currentRoute === href;
+  return html`<a class=${isActive && "active"} href=${href} @click=${onLinkClick}>${children}</a>`;
+}
+NavLink.css = ` :host { display: inline-block; } `;
+defineWomp(NavLink, {
+  name: "womp-nav-link"
+});
+export const useParams = () => {
+  const routerContext = useContext(RouterContext);
+  return routerContext.params;
+};
+export const useNavigate = () => {
+  const routerContext = useContext(RouterContext);
+  return routerContext.setNewRoute;
+};
+export const useCurrentRoute = () => {
+  const routerContext = useContext(RouterContext);
+  return routerContext.currentRoute;
+};

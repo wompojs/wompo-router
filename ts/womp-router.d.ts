@@ -15,6 +15,7 @@ export declare function Routes({ children }: RoutesProps): RenderHtml;
 interface RouteProps extends WompProps {
     path?: string;
     index?: boolean;
+    redirect?: string;
     element?: RenderHtml;
     lazy?: () => LazyCallbackResult;
     fallback?: RenderHtml;
@@ -29,6 +30,11 @@ export declare function Link({ to, children }: LinkProps): RenderHtml;
 export declare namespace Link {
     var css: string;
 }
+export declare function NavLink({ to, children }: LinkProps): RenderHtml;
+export declare namespace NavLink {
+    var css: string;
+}
 export declare const useParams: () => any;
 export declare const useNavigate: () => (newValue: string, push?: boolean) => void;
+export declare const useCurrentRoute: () => string;
 export {};
