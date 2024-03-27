@@ -368,8 +368,7 @@ export function Link({ to, children }: LinkProps) {
 	};
 	return html`<a href=${href} @click=${onLinkClick}>${children}</a> `;
 }
-Link.css = ` :host { display: inline-block; } `;
-
+Link.css = `:host { display: inline-block; }`;
 defineWomp(Link, {
 	name: 'womp-link',
 });
@@ -402,7 +401,7 @@ export function NavLink({ to, children }: LinkProps) {
 	const isActive = currentRoute === href;
 	return html`<a class=${isActive && 'active'} href=${href} @click=${onLinkClick}>${children}</a>`;
 }
-NavLink.css = ` :host { display: inline-block; } `;
+NavLink.css = `:host { display: inline-block; }`;
 
 defineWomp(NavLink, {
 	name: 'womp-nav-link',
