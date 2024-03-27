@@ -9,7 +9,7 @@
 	"main": "./dist/womp-router.js",
 	"types": "./ts/womp-router.d.ts",
 	"scripts": {
-		"dev": "tsc & esbuild ts/womp-router.ts --outdir=dist --allow-overwrite",
+		"dev": "esbuild ts/womp-router.ts --outdir=dist --allow-overwrite --watch",
 		"build": "tsc & esbuild ts/womp-router.ts --minify --outdir=dist --allow-overwrite",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},

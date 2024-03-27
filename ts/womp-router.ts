@@ -172,7 +172,7 @@ const getMatch = (
 	} else if (fallbackPaths.length) {
 		match = getWichParametricRouteisMoreSpecific(matches.fallbacks);
 	}
-	const redirect = match[0].redirect || match[0].index?.redirect;
+	const redirect = match[0]?.redirect || match[0]?.index?.redirect;
 	if (redirect) {
 		const newPath = getFullPath(broswerRoute, redirect);
 		history.replaceState({}, undefined, newPath);
@@ -184,7 +184,7 @@ const getMatch = (
 const getFullPath = (prevRoute: string, newRoute: string) => {
 	return newRoute.startsWith('/')
 		? newRoute
-		: prevRoute + (prevRoute.endsWith('/') ? '' : '/') + newRoute;
+		: prevRoute + (prevRoute.endsWith('/') || newRoute.startsWith('#') ? '' : '/') + newRoute;
 };
 
 const getRouteContent = (route: RouteStructure) => {
@@ -225,65 +225,87 @@ interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'>
 }
 
 interface RouterContext {
-	route: RouteStructure;
 	params: any;
+	hash?: string;
 	currentRoute: string;
 	setNewRoute: (newValue: string, push?: boolean) => void;
 }
 const RouterContext = createContext<RouterContext>({
-	route: null,
 	params: null,
+	hash: null,
 	currentRoute: null,
 	setNewRoute: null,
 });
 
+const scrollIntoView = (hash: string) => {
+	if (hash) {
+		const element = document.getElementById(hash);
+		const y = element.getBoundingClientRect().top + window.scrollY + 60;
+		if (element) element.scrollIntoView({ block: 'start', behavior: 'smooth' });
+	}
+};
+
 export function Routes({ children }: RoutesProps) {
 	const [currentRoute, setCurrentRoute] = useState(window.location.pathname);
-	const context = useRef<RouterContext>({
-		route: null,
-		params: null,
-		currentRoute: null,
-		setNewRoute: null,
-	});
 
 	const setNewRoute = useCallback((newRoute: string, pushState: boolean = true) => {
 		setCurrentRoute((prevRoute) => {
 			const nextRoute = getFullPath(prevRoute, newRoute);
+			const [pathname, hash] = nextRoute.split('#');
 			if (pushState && prevRoute !== nextRoute) {
 				history.pushState({}, null, nextRoute);
-				context.current.currentRoute = nextRoute;
+				if (!hash) window.scrollTo(0, 0);
 			}
-			return nextRoute;
+			scrollIntoView(hash);
+			return pathname;
 		});
 	});
-
-	context.current.currentRoute = currentRoute;
-	context.current.setNewRoute = setNewRoute;
 
 	const treeStructure = useMemo(() => {
 		const [tree, toPreload] = buildTreeStructure(children.nodes);
 		// Preload lazy components
 		if (window.requestIdleCallback) {
-			// TODO doesnt work on Safari
 			toPreload.forEach((asyncComponent) => {
 				requestIdleCallback(asyncComponent);
 			});
+		} else {
+			// requestIdleCallback is not available on Safari
+			setTimeout(() => {
+				toPreload.forEach((asyncComponent) => {
+					asyncComponent();
+				});
+			}, 4000);
 		}
 		return tree;
 	}, []);
+
 	const routes: [string, RouteStructure][] = useMemo(() => getRoutes(treeStructure), []);
 
 	useEffect(() => {
 		window.addEventListener('popstate', () => {
+			window.scrollTo(0, 0);
 			setNewRoute(window.location.pathname, false);
 		});
+		// Wait 200 milliseconds to render everything
+		setTimeout(() => {
+			scrollIntoView(context.hash);
+		}, 200);
 	}, []);
 
 	const [route, params] = getMatch(routes, currentRoute);
-	context.current.params = params;
 
-	if (!route) return html`<div>Not found!</div>`; //! Make custom component. Allow to override it.
-	let root = route;
+	const context = useMemo(
+		() =>
+			({
+				hash: window.location.hash.split('#')[1],
+				params: params,
+				currentRoute: currentRoute,
+				setNewRoute: setNewRoute,
+			} as RouterContext),
+		[currentRoute]
+	);
+
+	let root = route ?? ({ notFound: true } as any);
 	let nextRoute = null;
 	root.nextRoute = nextRoute;
 	while (root.parent) {
@@ -291,10 +313,11 @@ export function Routes({ children }: RoutesProps) {
 		root = root.parent;
 		root.nextRoute = nextRoute;
 	}
-	context.current.route = root;
-	return html`<${RouterContext.Provider} value=${context.current}>${getRouteContent(root)}</${
-		RouterContext.Provider
-	}>`;
+
+	// TODO Custom 404
+	return html`<${RouterContext.Provider} value=${context}>
+		${root.notFound ? html`<div>Not found!</div>` : getRouteContent(root)}
+	</${RouterContext.Provider}>`;
 }
 
 defineWomp(Routes, {
@@ -359,11 +382,9 @@ interface LinkProps extends WompProps {
 	to: string;
 }
 
-export function Link({ to, children }: LinkProps) {
-	const navigate = useNavigate();
-	const route = useContext(SingleRouteContext);
+const getHref = (to: string, route: RouteStructure) => {
 	let href = to;
-	if (!href.startsWith('/')) {
+	if (!href.startsWith('/') && !href.startsWith('#')) {
 		let parentRoute = route;
 		while (parentRoute) {
 			const parentPath = parentRoute.path;
@@ -374,6 +395,13 @@ export function Link({ to, children }: LinkProps) {
 			parentRoute = parentRoute.parent;
 		}
 	}
+	return href;
+};
+
+export function Link({ to, children }: LinkProps) {
+	const navigate = useNavigate();
+	const route = useContext(SingleRouteContext);
+	const href = getHref(to, route);
 	const onLinkClick = (ev: Event) => {
 		ev.preventDefault();
 		navigate(href);
@@ -394,18 +422,7 @@ export function NavLink({ to, children }: LinkProps) {
 	const navigate = useNavigate();
 	const currentRoute = useCurrentRoute();
 	const route = useContext(SingleRouteContext);
-	let href = to;
-	if (!href.startsWith('/')) {
-		let parentRoute = route;
-		while (parentRoute) {
-			const parentPath = parentRoute.path;
-			if (parentPath) {
-				const slash = !parentPath.endsWith('/') ? '/' : '';
-				href = parentRoute.path + slash + href;
-			}
-			parentRoute = parentRoute.parent;
-		}
-	}
+	const href = getHref(to, route);
 	const onLinkClick = (ev: Event) => {
 		ev.preventDefault();
 		navigate(href);
