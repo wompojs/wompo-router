@@ -25,28 +25,30 @@ HELPERS
 const buildTreeStructure = (
 	childNodes: Node[] | NodeList,
 	structure: RouteStructure[] = [],
-	parent: RouteStructure = null
-) => {
+	parent: RouteStructure = null,
+	toPreload: LazyResult[] = []
+): [RouteStructure[], LazyResult[]] => {
 	childNodes.forEach((child) => {
 		if (child instanceof (Route as WompComponent).class) {
 			const props = child.props as RouteProps;
-			console.log(props);
+			const lazyComp = props.lazy ? lazy(props.lazy) : null;
 			const route: RouteStructure = {
 				...props,
 				parent: parent,
 				element: props.element,
 				path: props.path,
-				lazy: props.lazy ? lazy(props.lazy) : null,
+				lazy: lazyComp,
 				fallback: props.fallback,
 				index: null,
 				children: [],
 			};
+			if (lazyComp) toPreload.push(lazyComp);
 			if (props.index) parent.index = route;
 			structure.push(route);
-			buildTreeStructure(child.childNodes, route.children, route);
+			buildTreeStructure(child.childNodes, route.children, route, toPreload);
 		}
 	});
-	return structure;
+	return [structure, toPreload];
 };
 
 const getRoutes = (
@@ -258,7 +260,17 @@ export function Routes({ children }: RoutesProps) {
 	context.current.currentRoute = currentRoute;
 	context.current.setNewRoute = setNewRoute;
 
-	const treeStructure = useMemo(() => buildTreeStructure(children.nodes), []);
+	const treeStructure = useMemo(() => {
+		const [tree, toPreload] = buildTreeStructure(children.nodes);
+		// Preload lazy components
+		if (window.requestIdleCallback) {
+			// TODO doesnt work on Safari
+			toPreload.forEach((asyncComponent) => {
+				requestIdleCallback(asyncComponent);
+			});
+		}
+		return tree;
+	}, []);
 	const routes: [string, RouteStructure][] = useMemo(() => getRoutes(treeStructure), []);
 
 	useEffect(() => {
