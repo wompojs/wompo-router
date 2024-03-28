@@ -283,7 +283,6 @@ export function Routes({ children }: RoutesProps) {
 
 	useEffect(() => {
 		window.addEventListener('popstate', () => {
-			window.scrollTo(0, 0);
 			setNewRoute(window.location.pathname, false);
 		});
 		// Wait 200 milliseconds to render everything
