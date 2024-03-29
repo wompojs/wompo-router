@@ -240,7 +240,6 @@ const RouterContext = createContext<RouterContext>({
 const scrollIntoView = (hash: string) => {
 	if (hash) {
 		const element = document.getElementById(hash);
-		const y = element.getBoundingClientRect().top + window.scrollY + 60;
 		if (element) element.scrollIntoView({ block: 'start', behavior: 'smooth' });
 	}
 };
