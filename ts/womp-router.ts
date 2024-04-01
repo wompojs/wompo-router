@@ -263,7 +263,7 @@ export function Routes({ children }: RoutesProps) {
 	const treeStructure = useMemo(() => {
 		const [tree, toPreload] = buildTreeStructure(children.nodes);
 		// Preload lazy components
-		if (window.requestIdleCallback) {
+		/* if (window.requestIdleCallback) {
 			toPreload.forEach((asyncComponent) => {
 				requestIdleCallback(asyncComponent);
 			});
@@ -274,7 +274,7 @@ export function Routes({ children }: RoutesProps) {
 					asyncComponent();
 				});
 			}, 4000);
-		}
+		} */
 		return tree;
 	}, []);
 
