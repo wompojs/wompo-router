@@ -1,5 +1,5 @@
-import { type LazyCallbackResult, type LazyResult, RenderHtml, WompProps } from 'womp';
-interface RoutesProps extends WompProps {
+import { type LazyCallbackResult, type LazyResult, RenderHtml, WompoProps } from 'wompo';
+interface RoutesProps extends WompoProps {
 }
 interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'> {
     parent: RouteStructure;
@@ -12,7 +12,7 @@ interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'>
     lazy: LazyResult;
 }
 export declare function Routes({ children }: RoutesProps): RenderHtml;
-interface RouteProps extends WompProps {
+interface RouteProps extends WompoProps {
     path?: string;
     index?: boolean;
     redirect?: string;
@@ -23,7 +23,7 @@ interface RouteProps extends WompProps {
 }
 export declare function Route({ route }: RouteProps): RenderHtml;
 export declare function ChildRoute(): RenderHtml;
-interface LinkProps extends WompProps {
+interface LinkProps extends WompoProps {
     to: string;
 }
 export declare function Link({ to, children }: LinkProps): RenderHtml;

@@ -1,26 +1,26 @@
 {
-	"author": "Lorenzo Lannino",
+	"author": "Lorenzo Lannino <lanninolore@gmail.com>",
 	"license": "ISC",
-	"name": "womp-router",
+	"name": "wompo-router",
 	"description": "",
 	"version": "1.0.0",
 	"type": "module",
-	"module": "./dist/womp-router.js",
-	"main": "./dist/womp-router.js",
-	"types": "./ts/womp-router.d.ts",
+	"module": "./dist/wompo-router.js",
+	"main": "./dist/wompo-router.js",
+	"types": "./ts/wompo-router.d.ts",
 	"scripts": {
-		"dev": "esbuild ts/womp-router.ts --outdir=dist --allow-overwrite --watch",
-		"build": "tsc & esbuild ts/womp-router.ts --minify --outdir=dist --allow-overwrite",
+		"dev": "esbuild ts/wompo-router.ts --outdir=dist --allow-overwrite --watch",
+		"build": "tsc & esbuild ts/wompo-router.ts --minify --outdir=dist --allow-overwrite",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
 	"exports": {
 		".": {
-			"types": "./ts/womp-router.d.ts",
-			"default": "./dist/womp-router.js"
+			"types": "./ts/wompo-router.d.ts",
+			"default": "./dist/wompo-router.js"
 		}
 	},
 	"dependencies": {
-		"womp": "../womp"
+		"wompo": "^1.0.0"
 	},
 	"devDependencies": {
 		"esbuild": "0.20.1",

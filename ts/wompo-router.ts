@@ -2,10 +2,10 @@ import {
 	type LazyCallbackResult,
 	type LazyResult,
 	RenderHtml,
-	WompComponent,
-	WompProps,
+	WompoComponent,
+	WompoProps,
 	createContext,
-	defineWomp,
+	defineWompo,
 	lazy,
 	useCallback,
 	useContext,
@@ -15,7 +15,7 @@ import {
 	Suspense,
 	html,
 	useRef,
-} from 'womp';
+} from 'wompo';
 
 /* 
 ================================================================
@@ -29,7 +29,7 @@ const buildTreeStructure = (
 	toPreload: LazyResult[] = []
 ): [RouteStructure[], LazyResult[]] => {
 	childNodes.forEach((child) => {
-		if (child instanceof (Route as WompComponent).class) {
+		if (child instanceof (Route as WompoComponent).class) {
 			const props = child.props as RouteProps;
 			const lazyComp = props.lazy ? lazy(props.lazy) : null;
 			const route: RouteStructure = {
@@ -211,7 +211,7 @@ const getRouteContent = (route: RouteStructure) => {
 ROUTES
 ================================================================
 */
-interface RoutesProps extends WompProps {}
+interface RoutesProps extends WompoProps {}
 
 interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'> {
 	parent: RouteStructure;
@@ -318,7 +318,7 @@ export function Routes({ children }: RoutesProps) {
 	</${RouterContext.Provider}>`;
 }
 
-defineWomp(Routes, {
+defineWompo(Routes, {
 	name: 'womp-routes',
 });
 
@@ -330,7 +330,7 @@ ROUTE
 
 const SingleRouteContext = createContext<RouteStructure>(null);
 
-interface RouteProps extends WompProps {
+interface RouteProps extends WompoProps {
 	path?: string;
 	index?: boolean;
 	redirect?: string;
@@ -344,7 +344,7 @@ export function Route({ route }: RouteProps) {
 	return html``;
 }
 
-defineWomp(Route, {
+defineWompo(Route, {
 	name: 'womp-route',
 });
 
@@ -367,7 +367,7 @@ export function ChildRoute() {
 	return getRouteContent(toRender);
 }
 
-defineWomp(ChildRoute, {
+defineWompo(ChildRoute, {
 	name: 'womp-child-route',
 });
 
@@ -376,7 +376,7 @@ defineWomp(ChildRoute, {
 LINK
 ================================================================
 */
-interface LinkProps extends WompProps {
+interface LinkProps extends WompoProps {
 	to: string;
 }
 
@@ -407,7 +407,7 @@ export function Link({ to, children }: LinkProps) {
 	return html`<a href=${href} @click=${onLinkClick}>${children}</a> `;
 }
 Link.css = `:host { display: inline-block; }`;
-defineWomp(Link, {
+defineWompo(Link, {
 	name: 'womp-link',
 });
 
@@ -430,7 +430,7 @@ export function NavLink({ to, children }: LinkProps) {
 }
 NavLink.css = `:host { display: inline-block; }`;
 
-defineWomp(NavLink, {
+defineWompo(NavLink, {
 	name: 'womp-nav-link',
 });
 
