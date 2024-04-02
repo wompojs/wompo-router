@@ -1,13 +1,21 @@
 {
-	"author": "Lorenzo Lannino <lanninolore@gmail.com>",
-	"license": "ISC",
 	"name": "wompo-router",
-	"description": "",
 	"version": "1.0.0",
+	"author": "Lorenzo Lannino <lanninolore@gmail.com>",
+	"description": "Wompo-Router makes creating a Single Page Application easy using Wompo.",
+	"license": "ISC",
 	"type": "module",
 	"module": "./dist/wompo-router.js",
 	"main": "./dist/wompo-router.js",
 	"types": "./ts/wompo-router.d.ts",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Saderyal/wompo-router.git"
+	},
+	"bugs": {
+		"url": "https://github.com/Saderyal/wompo-router/issues"
+	},
+	"homepage": "https://github.com/Saderyal/wompo-router",
 	"scripts": {
 		"dev": "esbuild ts/wompo-router.ts --outdir=dist --allow-overwrite --watch",
 		"build": "tsc & esbuild ts/wompo-router.ts --minify --outdir=dist --allow-overwrite",
