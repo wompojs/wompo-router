@@ -2,7 +2,7 @@
 	"name": "wompo-router",
 	"version": "1.0.0",
 	"author": "Lorenzo Lannino <lanninolore@gmail.com>",
-	"description": "Wompo-Router makes creating a Single Page Application easy using Wompo.",
+	"description": "Wompo-Router allows to create a Single Page Application using Wompo.",
 	"license": "ISC",
 	"type": "module",
 	"module": "./dist/wompo-router.js",
