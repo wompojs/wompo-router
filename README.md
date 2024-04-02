@@ -11,13 +11,12 @@ Wompo Router exposes the following components to create routes:
 - `Route` - Define a single route. Accepts the following props:
   ```ts
   interface RouteProps extends WompoProps {
-    path?: string;
-    index?: boolean;
-    redirect?: string;
-    element?: RenderHtml;
-    lazy?: () => LazyCallbackResult;
-    fallback?: RenderHtml;
-    route?: RouteStructure;
+    path?: string; // The path of the route.
+    index?: boolean; // True if the route is an index route (of the parent).
+    redirect?: string; // If valorized, the route will redirect to another one.
+    element?: RenderHtml; // The element to render.
+    lazy?: () => LazyCallbackResult; // If valorized, must be a callback that returns a lazy component.
+    fallback?: RenderHtml; // The fallback element to visualize while a lazy component is being imported.
   }
   ```
 - `ChildRoute` - Defines where a child route should be rendered inside the parent route. Accepts no props.
