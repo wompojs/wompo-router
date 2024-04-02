@@ -57,7 +57,7 @@ function App(){
 }
 ```
 
-The above routing system will have the following routes:
+The above routing system will generate the following routes:
 
 - /
 - /docs ---> will redirect to ---> /docs/overview
@@ -68,7 +68,7 @@ The above routing system will have the following routes:
 All the other routes will fallback into the `NotFound` Page.
 
 So, if you go to the url _/docs/hooks/useNavigate_, Womp Router will render the
-following nested routes:
+following nested routes where "useNavigate" is assigned to the "name" parameter:
 
 ```javascript
 <DocsLayout>
