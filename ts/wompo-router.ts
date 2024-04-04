@@ -14,7 +14,6 @@ import {
 	useState,
 	Suspense,
 	html,
-	useRef,
 } from 'wompo';
 
 /* 
@@ -25,9 +24,8 @@ HELPERS
 const buildTreeStructure = (
 	childNodes: Node[] | NodeList,
 	structure: RouteStructure[] = [],
-	parent: RouteStructure = null,
-	toPreload: LazyResult[] = []
-): [RouteStructure[], LazyResult[]] => {
+	parent: RouteStructure = null
+): RouteStructure[] => {
 	childNodes.forEach((child) => {
 		if (child instanceof (Route as WompoComponent).class) {
 			const props = child.props as RouteProps;
@@ -42,13 +40,12 @@ const buildTreeStructure = (
 				index: null,
 				children: [],
 			};
-			if (lazyComp) toPreload.push(lazyComp);
 			if (props.index) parent.index = route;
 			structure.push(route);
-			buildTreeStructure(child.childNodes, route.children, route, toPreload);
+			buildTreeStructure(child.childNodes, route.children, route);
 		}
 	});
-	return [structure, toPreload];
+	return structure;
 };
 
 const getRoutes = (
@@ -229,12 +226,14 @@ interface RouterContext {
 	hash?: string;
 	currentRoute: string;
 	setNewRoute: (newValue: string, push?: boolean) => void;
+	routes: [string, RouteStructure][];
 }
 const RouterContext = createContext<RouterContext>({
 	params: null,
 	hash: null,
 	currentRoute: null,
 	setNewRoute: null,
+	routes: [],
 });
 
 const scrollIntoView = (hash: string) => {
@@ -261,20 +260,7 @@ export function Routes({ children }: RoutesProps) {
 	});
 
 	const treeStructure = useMemo(() => {
-		const [tree, toPreload] = buildTreeStructure(children.nodes);
-		// Preload lazy components
-		/* if (window.requestIdleCallback) {
-			toPreload.forEach((asyncComponent) => {
-				requestIdleCallback(asyncComponent);
-			});
-		} else {
-			// requestIdleCallback is not available on Safari
-			setTimeout(() => {
-				toPreload.forEach((asyncComponent) => {
-					asyncComponent();
-				});
-			}, 4000);
-		} */
+		const tree = buildTreeStructure(children.nodes);
 		return tree;
 	}, []);
 
@@ -299,6 +285,7 @@ export function Routes({ children }: RoutesProps) {
 				params: params,
 				currentRoute: currentRoute,
 				setNewRoute: setNewRoute,
+				routes: routes,
 			} as RouterContext),
 		[currentRoute]
 	);
@@ -419,14 +406,26 @@ NAV-LINK
 export function NavLink({ to, children }: LinkProps) {
 	const navigate = useNavigate();
 	const currentRoute = useCurrentRoute();
+	const routes = useRoutes();
 	const route = useContext(SingleRouteContext);
 	const href = getHref(to, route);
 	const onLinkClick = (ev: Event) => {
 		ev.preventDefault();
 		navigate(href);
 	};
+	const preload = () => {
+		const [route] = getMatch(routes, href.split('#')[0]);
+		if (route && route.lazy) route.lazy();
+	};
 	const isActive = currentRoute === href;
-	return html`<a class=${isActive && 'active'} href=${href} @click=${onLinkClick}>${children}</a>`;
+	return html`<a
+		class=${isActive && 'active'}
+		href=${href}
+		@click=${onLinkClick}
+		@mouseenter=${preload}
+	>
+		${children}
+	</a>`;
 }
 NavLink.css = `:host { display: inline-block; }`;
 
@@ -452,4 +451,9 @@ export const useNavigate = () => {
 export const useCurrentRoute = () => {
 	const routerContext = useContext(RouterContext);
 	return routerContext.currentRoute;
+};
+
+export const useRoutes = () => {
+	const routerContext = useContext(RouterContext);
+	return routerContext.routes;
 };
