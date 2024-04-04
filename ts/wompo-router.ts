@@ -386,12 +386,17 @@ const getHref = (to: string, route: RouteStructure) => {
 export function Link({ to, children }: LinkProps) {
 	const navigate = useNavigate();
 	const route = useContext(SingleRouteContext);
+	const routes = useRoutes();
 	const href = getHref(to, route);
 	const onLinkClick = (ev: Event) => {
 		ev.preventDefault();
 		navigate(href);
 	};
-	return html`<a href=${href} @click=${onLinkClick}>${children}</a> `;
+	const preload = () => {
+		const [route] = getMatch(routes, href.split('#')[0]);
+		if (route && route.lazy) route.lazy();
+	};
+	return html`<a href=${href} @click=${onLinkClick} @mouseenter=${preload}>${children}</a>`;
 }
 Link.css = `:host { display: inline-block; }`;
 defineWompo(Link, {

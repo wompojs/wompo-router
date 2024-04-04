@@ -11,12 +11,12 @@ Wompo Router exposes the following components to create routes:
 - `Route` - Define a single route. Accepts the following props:
   ```ts
   interface RouteProps extends WompoProps {
-    path?: string; // The path of the route.
-    index?: boolean; // True if the route is an index route (of the parent).
-    redirect?: string; // If valorized, the route will redirect to another one.
-    element?: RenderHtml; // The element to render.
-    lazy?: () => LazyCallbackResult; // If valorized, must be a callback that returns a lazy component.
-    fallback?: RenderHtml; // The fallback element to visualize while a lazy component is being imported.
+  	path?: string; // The path of the route.
+  	index?: boolean; // True if the route is an index route (of the parent).
+  	redirect?: string; // If valorized, the route will redirect to another one.
+  	element?: RenderHtml; // The element to render.
+  	lazy?: () => LazyCallbackResult; // If valorized, must be a callback that returns a lazy component.
+  	fallback?: RenderHtml; // The fallback element to visualize while a lazy component is being imported.
   }
   ```
 - `ChildRoute` - Defines where a child route should be rendered inside the parent route. Accepts no props.
@@ -32,27 +32,28 @@ Finally, Wompo Router has the following hooks:
 - `useParams` - Will return the parameters for the current route.
 - `useNavigate` - Will return a **navigate** function that you can use to manually navigate across routes.
 - `useCurrentRoute` - Will return the current route.
+- `useRoutes` - Will return the array of routes that the router can handle.
 
 ## Creating an Application
 
 This is an example of an application made with Wompo Router:
 
 ```javascript
-function App(){
-  return (
-    <Routes>
-      <Route path='/' element={<HomePage />} />
-      <Route path='/docs' element={<DocsLayout />}>
-        <Route path="overview" element={<Overview />} />
-        <Route path="quick-start" element={<QuickStart />} />
-        <Route path="hooks" element={<Hooks />}>
-          <Route path=":name" element={<Hook />} />
-        </Route>
-        <Route index redirect="overview" />
-      </Route>
-      <Route path='*' element={<NotFound />} />
-    </Routes>
-  );
+function App() {
+	return (
+		<Routes>
+			<Route path='/' element={<HomePage />} />
+			<Route path='/docs' element={<DocsLayout />}>
+				<Route path='overview' element={<Overview />} />
+				<Route path='quick-start' element={<QuickStart />} />
+				<Route path='hooks' element={<Hooks />}>
+					<Route path=':name' element={<Hook />} />
+				</Route>
+				<Route index redirect='overview' />
+			</Route>
+			<Route path='*' element={<NotFound />} />
+		</Routes>
+	);
 }
 ```
 
@@ -71,9 +72,9 @@ following nested routes where "useNavigate" is assigned to the "name" parameter:
 
 ```javascript
 <DocsLayout>
-  <Hooks>
-    <Hook />
-  </Hooks>
+	<Hooks>
+		<Hook />
+	</Hooks>
 </DocsLayout>
 ```
 
