@@ -10,12 +10,12 @@
 	"types": "./ts/wompo-router.d.ts",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/Saderyal/wompo-router.git"
+		"url": "https://github.com/wompojs/wompo-router.git"
 	},
 	"bugs": {
-		"url": "https://github.com/Saderyal/wompo-router/issues"
+		"url": "https://github.com/wompojs/wompo-router/issues"
 	},
-	"homepage": "https://github.com/Saderyal/wompo-router",
+	"homepage": "https://github.com/wompojs/wompo-router",
 	"scripts": {
 		"dev": "esbuild ts/wompo-router.ts --outdir=dist --allow-overwrite --watch",
 		"build": "tsc & esbuild ts/wompo-router.ts --minify --outdir=dist --allow-overwrite",
