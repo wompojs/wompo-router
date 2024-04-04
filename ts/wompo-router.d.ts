@@ -37,4 +37,5 @@ export declare namespace NavLink {
 export declare const useParams: () => any;
 export declare const useNavigate: () => (newValue: string, push?: boolean) => void;
 export declare const useCurrentRoute: () => string;
+export declare const useRoutes: () => [string, RouteStructure][];
 export {};
