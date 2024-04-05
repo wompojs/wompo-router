@@ -20,8 +20,12 @@ interface RouteProps extends WompoProps {
     lazy?: () => LazyCallbackResult;
     fallback?: RenderHtml;
     route?: RouteStructure;
+    meta?: {
+        title?: string;
+        description?: string;
+    };
 }
-export declare function Route({ route }: RouteProps): RenderHtml;
+export declare function Route(_: RouteProps): RenderHtml;
 export declare function ChildRoute(): RenderHtml;
 interface LinkProps extends WompoProps {
     to: string;

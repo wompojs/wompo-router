@@ -290,7 +290,21 @@ export function Routes({ children }: RoutesProps) {
 		[currentRoute]
 	);
 
-	let root = route ?? ({ notFound: true } as any);
+	let root = { notFound: true } as any;
+	if (route) {
+		root = route;
+		if (route.meta?.title) {
+			document.title = route.meta.title;
+			const ogMeta = document.querySelector('meta[property="og:title"]');
+			if (ogMeta) ogMeta.setAttribute('content', route.meta.title);
+		}
+		if (route.meta?.description) {
+			const meta = document.querySelector('meta[name="description"]');
+			if (meta) meta.setAttribute('content', route.meta.description);
+			const ogMeta = document.querySelector('meta[property="og:description"]');
+			if (ogMeta) ogMeta.setAttribute('content', route.meta.description);
+		}
+	}
 	let nextRoute = null;
 	root.nextRoute = nextRoute;
 	while (root.parent) {
@@ -325,14 +339,18 @@ interface RouteProps extends WompoProps {
 	lazy?: () => LazyCallbackResult;
 	fallback?: RenderHtml;
 	route?: RouteStructure;
+	meta?: {
+		title?: string;
+		description?: string;
+	};
 }
 
-export function Route({ route }: RouteProps) {
+export function Route(_: RouteProps) {
 	return html``;
 }
 
 defineWompo(Route, {
-	name: 'womp-route',
+	name: 'wompo-route',
 });
 
 /* 
@@ -355,7 +373,7 @@ export function ChildRoute() {
 }
 
 defineWompo(ChildRoute, {
-	name: 'womp-child-route',
+	name: 'wompo-child-route',
 });
 
 /* 
@@ -400,7 +418,7 @@ export function Link({ to, children }: LinkProps) {
 }
 Link.css = `:host { display: inline-block; }`;
 defineWompo(Link, {
-	name: 'womp-link',
+	name: 'wompo-link',
 });
 
 /* 
@@ -435,7 +453,7 @@ export function NavLink({ to, children }: LinkProps) {
 NavLink.css = `:host { display: inline-block; }`;
 
 defineWompo(NavLink, {
-	name: 'womp-nav-link',
+	name: 'wompo-nav-link',
 });
 
 /* 

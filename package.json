@@ -1,9 +1,9 @@
 {
 	"name": "wompo-router",
-	"version": "1.0.2",
+	"version": "1.1.0",
 	"author": "Lorenzo Lannino <lanninolore@gmail.com>",
 	"description": "Wompo-Router allows to create a Single Page Application using Wompo.",
-	"license": "ISC",
+	"license": "MIT",
 	"type": "module",
 	"module": "./dist/wompo-router.js",
 	"main": "./dist/wompo-router.js",
@@ -28,7 +28,7 @@
 		}
 	},
 	"dependencies": {
-		"wompo": "^1.0.0"
+		"wompo": "^1.0.3"
 	},
 	"devDependencies": {
 		"esbuild": "0.20.1",

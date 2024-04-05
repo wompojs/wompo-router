@@ -6,7 +6,7 @@
 		"lib": ["es2020", "dom"],
 		"target": "ES2021",
 		"jsx": "react-jsx",
-		"jsxImportSource": "womp",
+		"jsxImportSource": "wompo",
 		"moduleResolution": "node",
 		"declaration": true,
 		"emitDeclarationOnly": true,
