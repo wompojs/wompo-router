@@ -396,7 +396,9 @@ export function Link({ to, children }: LinkProps) {
 		const [route] = getMatch(routes, href.split('#')[0]);
 		if (route && route.lazy) route.lazy();
 	};
-	return html`<a href=${href} @click=${onLinkClick} @mouseenter=${preload}>${children}</a>`;
+	return html`<a href=${href} @click=${onLinkClick} @mouseenter=${preload} @touchstart=${preload}>
+		${children}
+	</a>`;
 }
 Link.css = `:host { display: inline-block; }`;
 defineWompo(Link, {
@@ -428,6 +430,7 @@ export function NavLink({ to, children }: LinkProps) {
 		href=${href}
 		@click=${onLinkClick}
 		@mouseenter=${preload}
+		@touchstart=${preload}
 	>
 		${children}
 	</a>`;
