@@ -252,7 +252,6 @@ export function Routes({ children }: RoutesProps) {
 			const [pathname, hash] = nextRoute.split('#');
 			if (pushState && prevRoute !== nextRoute) {
 				history.pushState({}, null, nextRoute);
-				if (!hash) window.scrollTo(0, 0);
 			}
 			scrollIntoView(hash);
 			return pathname;
@@ -270,18 +269,29 @@ export function Routes({ children }: RoutesProps) {
 		window.addEventListener('popstate', () => {
 			setNewRoute(window.location.pathname, false);
 		});
-		// Wait 200 milliseconds to render everything
-		setTimeout(() => {
-			scrollIntoView(context.hash);
-		}, 200);
 	}, []);
 
+	const hash = window.location.hash.split('#')[1];
 	const [route, params] = getMatch(routes, currentRoute);
+
+	useEffect(() => {
+		if (route.lazy) {
+			route.lazy().then(() => {
+				setTimeout(() => {
+					if (!hash) window.scrollTo(0, 0);
+					else scrollIntoView(hash);
+				});
+			});
+		} else {
+			if (!hash) window.scrollTo(0, 0);
+			else scrollIntoView(hash);
+		}
+	}, [currentRoute]);
 
 	const context = useMemo(
 		() =>
 			({
-				hash: window.location.hash.split('#')[1],
+				hash: hash,
 				params: params,
 				currentRoute: currentRoute,
 				setNewRoute: setNewRoute,
