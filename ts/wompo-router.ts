@@ -275,16 +275,15 @@ export function Routes({ children }: RoutesProps) {
 	const [route, params] = getMatch(routes, currentRoute);
 
 	useEffect(() => {
+		window.scrollTo(0, 0);
 		if (route.lazy) {
 			route.lazy().then(() => {
 				setTimeout(() => {
-					if (!hash) window.scrollTo(0, 0);
-					else scrollIntoView(hash);
+					scrollIntoView(hash);
 				});
 			});
 		} else {
-			if (!hash) window.scrollTo(0, 0);
-			else scrollIntoView(hash);
+			scrollIntoView(hash);
 		}
 	}, [currentRoute]);
 
