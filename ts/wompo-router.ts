@@ -16,6 +16,17 @@ import {
 	html,
 } from 'wompo';
 
+const IS_SERVER = typeof global !== 'undefined';
+if (IS_SERVER) {
+	(global as any).window = {
+		location: {
+			pathname: '/',
+			hash: '',
+		},
+		addEventListener: () => {},
+		scrollTo: () => {},
+	};
+}
 /* 
 ================================================================
 HELPERS
