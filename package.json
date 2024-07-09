@@ -28,7 +28,7 @@
 		}
 	},
 	"dependencies": {
-		"wompo": "^1.0.9"
+		"wompo": "^1.0.10"
 	},
 	"devDependencies": {
 		"esbuild": "0.20.1",
