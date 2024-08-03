@@ -7,7 +7,9 @@ Wompo Router uses nested routes to create layouts, based on the famous React-Rou
 
 Wompo Router exposes the following components to create routes:
 
-- `Routes` - It's the component that will include the whole routing logic. Accepts no props.
+- `Routes` - It's the component that will include the whole routing logic. Accepts a
+  **notFoundElement** prop, which defines what to render when the router don't find a matching
+  route, and an **origin** prop, which specifies the url location on where the routing starts.
 - `Route` - Define a single route. Accepts the following props:
   ```ts
   interface RouteProps extends WompoProps {
@@ -17,15 +19,19 @@ Wompo Router exposes the following components to create routes:
   	element?: RenderHtml; // The element to render.
   	lazy?: () => LazyCallbackResult; // If valorized, must be a callback that returns a lazy component.
   	fallback?: RenderHtml; // The fallback element to visualize while a lazy component is being imported.
+  	meta?: {
+  		title?: string;
+  		description?: string;
+  	};
   }
   ```
 - `ChildRoute` - Defines where a child route should be rendered inside the parent route. Accepts no props.
 
 It also exposes this helper components:
 
-- `Link` - The component you want to use to navigate across routes. Accepts a single prop: _to_ (the link).
+- `Link` - The component you want to use to navigate across routes. Accepts two props: _to_ (the link), and _target_.
 - `NavLink` - Same as Link, but will have an "active" class if the current route corresponds to the link.
-  Accepts a single prop: _to_ (the link).
+  Accepts a two props: _to_ (the link), and _target_..
 
 Finally, Wompo Router has the following hooks:
 
