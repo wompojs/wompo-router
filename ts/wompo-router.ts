@@ -22,6 +22,7 @@ HELPERS
 ================================================================
 */
 const buildTreeStructure = (
+	origin: string | null,
 	childNodes: Node[] | NodeList,
 	structure: RouteStructure[] = [],
 	parent: RouteStructure = null
@@ -30,11 +31,17 @@ const buildTreeStructure = (
 		if (child instanceof (Route as WompoComponent).class) {
 			const props = child.props as RouteProps;
 			const lazyComp = props.lazy ? lazy(props.lazy) : null;
+			const path =
+				parent === null && origin
+					? (props.path.startsWith('/')
+							? props.path.substring(0, props.path.length - 1)
+							: props.path) + origin
+					: props.path;
 			const route: RouteStructure = {
 				...props,
 				parent: parent,
 				element: props.element,
-				path: props.path,
+				path: path,
 				lazy: lazyComp,
 				fallback: props.fallback,
 				index: null,
@@ -42,7 +49,7 @@ const buildTreeStructure = (
 			};
 			if (props.index) parent.index = route;
 			structure.push(route);
-			buildTreeStructure(child.childNodes, route.children, route);
+			buildTreeStructure(origin, child.childNodes, route.children, route);
 		}
 	});
 	return structure;
@@ -70,6 +77,7 @@ const getRoutes = (
 
 interface Params {
 	segments?: string[];
+	search?: { [key: string]: any };
 	[key: string]: any;
 }
 
@@ -101,6 +109,15 @@ const getWichParametricRouteisMoreSpecific = (routes: Params) => {
 		return difference;
 	});
 	return routes[parametricPaths[0]];
+};
+
+const getSearchObject = (searchString: string) => {
+	const search: any = {};
+	searchString.split('&').forEach((keyVal) => {
+		const [key, value] = keyVal.split('=');
+		search[key] = value;
+	});
+	return search;
 };
 
 const getMatch = (
@@ -150,9 +167,14 @@ const getMatch = (
 		const matchRegex = new RegExp(regex, 'g');
 		const match = matchRegex.exec(currentRoute);
 		if (match) {
-			const params: { [key: string]: string } = {};
+			const params: Params = {};
 			// Skips first element, which is the whole match
 			for (let i = 1; i < match.length; i++) {
+				if (match[i].includes('?')) {
+					const [param, searchString] = match[i].split('?');
+					match[i] = param;
+					params.search = getSearchObject(searchString);
+				}
 				params[paramNames[i - 1]] = match[i];
 			}
 			if (isFallback) matches.fallbacks[routePath] = [route, params];
@@ -171,17 +193,11 @@ const getMatch = (
 	}
 	const redirect = match[0]?.redirect || match[0]?.index?.redirect;
 	if (redirect) {
-		const newPath = getFullPath(broswerRoute, redirect);
+		const newPath = getHref(redirect, match[0], match[1]);
 		history.replaceState({}, undefined, newPath);
 		match = getMatch(routes, newPath);
 	}
 	return match;
-};
-
-const getFullPath = (prevRoute: string, newRoute: string) => {
-	return newRoute.startsWith('/')
-		? newRoute
-		: prevRoute + (prevRoute.endsWith('/') || newRoute.startsWith('#') ? '' : '/') + newRoute;
 };
 
 const getRouteContent = (route: RouteStructure) => {
@@ -208,7 +224,10 @@ const getRouteContent = (route: RouteStructure) => {
 ROUTES
 ================================================================
 */
-interface RoutesProps extends WompoProps {}
+interface RoutesProps extends WompoProps {
+	notFoundElement?: RenderHtml;
+	origin?: string;
+}
 
 interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'> {
 	parent: RouteStructure;
@@ -243,27 +262,58 @@ const scrollIntoView = (hash: string) => {
 	}
 };
 
-export function Routes({ children }: RoutesProps) {
+/**
+ * The main component to handle the client routing system.
+ * It will iterate through all the children to find `Route` components so that it'll build all the
+ * necessary routes.
+ * The routes will be deleted after the first render and the content of the current route will be
+ * displayed.
+ *
+ * It accepts the following props:
+ * - notFoundElement: the component to render if the route current route is not found between the
+ *   routes tree.
+ * - origin: specifies the url location on where the routing starts (e.g. "/admin").
+ *
+ * Example:
+ * ```javascript
+ * function App(){
+ *   return html`
+ *     <${Routes}>
+ * 		   <${Route} path="/" component=${html`<${Home} />`} />
+ * 			 <${Route} path="/users" component=${html`<${UsersDashboard} />`}>
+ * 				 <${Route} path=":id" component=${html`<${UserDetails} />`} />
+ * 				 <${Route} index component=${html`<${UsersList} />`} />
+ * 			 </${Route}>
+ *     </${Routes}>
+ *   `
+ * }
+ * ```
+ */
+export function Routes({ origin, notFoundElement, children }: RoutesProps) {
 	const [currentRoute, setCurrentRoute] = useState(window.location.pathname);
+
+	const treeStructure = useMemo(() => {
+		const tree = buildTreeStructure(origin, children.nodes);
+		return tree;
+	}, []);
+
+	const routes: [string, RouteStructure][] = useMemo(() => getRoutes(treeStructure), []);
+	const hash = window.location.hash.split('#')[1];
+	const [route, params] = getMatch(routes, currentRoute);
 
 	const setNewRoute = useCallback((newRoute: string, pushState: boolean = true) => {
 		setCurrentRoute((prevRoute) => {
-			const nextRoute = getFullPath(prevRoute, newRoute);
+			const nextRoute = getHref(newRoute, route, params);
 			const [pathname, hash] = nextRoute.split('#');
 			if (pushState && prevRoute !== nextRoute) {
 				history.pushState({}, null, nextRoute);
+			} else if (!pushState && prevRoute !== nextRoute) {
+				history.replaceState({}, null, nextRoute);
 			}
 			scrollIntoView(hash);
 			return pathname;
 		});
 	});
-
-	const treeStructure = useMemo(() => {
-		const tree = buildTreeStructure(children.nodes);
-		return tree;
-	}, []);
-
-	const routes: [string, RouteStructure][] = useMemo(() => getRoutes(treeStructure), []);
 
 	useEffect(() => {
 		window.addEventListener('popstate', () => {
@@ -271,12 +321,9 @@ export function Routes({ children }: RoutesProps) {
 		});
 	}, []);
 
-	const hash = window.location.hash.split('#')[1];
-	const [route, params] = getMatch(routes, currentRoute);
-
 	useEffect(() => {
 		window.scrollTo(0, 0);
-		if (route.lazy) {
+		if (route?.lazy) {
 			route.lazy().then(() => {
 				setTimeout(() => {
 					scrollIntoView(hash);
@@ -322,9 +369,12 @@ export function Routes({ children }: RoutesProps) {
 		root.nextRoute = nextRoute;
 	}
 
-	// TODO Custom 404
 	return html`<${RouterContext.Provider} value=${context}>
-		${root.notFound ? html`<div>Not found!</div>` : getRouteContent(root)}
+		${
+			root.notFound
+				? notFoundElement ?? html`<div class="wompo-router-not-found">Not found!</div>`
+				: getRouteContent(root)
+		}
 	</${RouterContext.Provider}>`;
 }
 
@@ -354,6 +404,24 @@ interface RouteProps extends WompoProps {
 	};
 }
 
+/**
+ * This component is basically only used to create the routing tree structure. It will not render
+ * anything, and will be deleted from the DOM after the `Routes` component has fully rendered.
+ *
+ * It accepts the following props:
+ * - path?: the path of the current route. If it is a nested route, it shouldn't start with a slash.
+ * - index?: If true, the route will be the index route of the parent. This is useful when you want
+ *   a route to be a layout route.
+ * - redirect?: if defined, the route will redirect the user to another path, without pushing the
+ *   route in the history stack.
+ * - element?: the element to render.
+ * - lazy?: if defined, it must be a callback that returns a lazy Wompo component. This is very
+ *   useful for performance optimizations, becasue every route will only be loaded when needed.
+ * - fallback?: if the `lazy` prop is defined, this property will define what to render while the
+ *   component to render is being fetched from the server.
+ * - meta?: the metadata associated to the route. It's an object that accepts a title and a
+ *   description key.
+ */
 export function Route(_: RouteProps) {
 	return html``;
 }
@@ -367,6 +435,39 @@ defineWompo(Route, {
 CHILD-ROUTE
 ================================================================
 */
+/**
+ * The `ChildRoute` component is the component responsible for building nested routes.
+ * Each nested route will not render automatically: you need to use this component.
+ *
+ * Example:
+ * Given the following routes:
+ * ```javascript
+ * function App(){
+ *   return html`
+ *     <${Routes}>
+ * 		   <${Route} path="/" component=${html`<${Home} />`} />
+ * 			 <${Route} path="/users" component=${html`<${UsersDashboard} />`}>
+ * 				 <${Route} path=":id" component=${html`<${UserDetails} />`} />
+ * 				 <${Route} index component=${html`<${UsersList} />`} />
+ * 			 </${Route}>
+ *     </${Routes}>
+ *   `
+ * }
+ * ```
+ *
+ * The `UsersDashboard` component will look like this:
+ * ```javascript
+ * function UsersDashboard(){
+ *   return html`
+ *     ...
+ *     <${ChildRoute} />
+ *     ...
+ *   `
+ * }
+ * ```
+ *
+ * The child route will allow to render the `UsersList` and the `UserDetails` components.
+ */
 export function ChildRoute() {
 	const route = useContext(SingleRouteContext);
 	let toRender: RouteStructure = null;
@@ -392,17 +493,28 @@ LINK
 */
 interface LinkProps extends WompoProps {
 	to: string;
+	target?: string;
 }
 
-const getHref = (to: string, route: RouteStructure) => {
+const getHref = (to: string, route: RouteStructure, params: Params) => {
 	let href = to;
-	if (!href.startsWith('/') && !href.startsWith('#')) {
+	if (!href.startsWith('/') && !href.startsWith('#') && route) {
 		let parentRoute = route;
 		while (parentRoute) {
 			const parentPath = parentRoute.path;
 			if (parentPath) {
 				const slash = !parentPath.endsWith('/') ? '/' : '';
-				href = parentRoute.path + slash + href;
+				let parentRoutePath = parentRoute.path;
+				if (parentRoutePath.includes(':')) {
+					const paths = parentRoutePath.split('/');
+					paths
+						.filter((p) => p.startsWith(':'))
+						.map((p) => p.substring(1))
+						.forEach((param) => {
+							parentRoutePath = parentRoutePath.replace(`:${param}`, params[param]);
+						});
+				}
+				href = parentRoutePath + slash + href;
 			}
 			parentRoute = parentRoute.parent;
 		}
@@ -410,20 +522,40 @@ const getHref = (to: string, route: RouteStructure) => {
 	return href;
 };
 
-export function Link({ to, children }: LinkProps) {
+/**
+ * This component will render a link to navigate through the routes. You should use this component
+ * instead of a simple `a` tag to navigate through your application, so that you use the pure client
+ * routing system, without fetching the whole page through the server.
+ *
+ * It accepts the following props:
+ * - to: required. The url of the link. If the link doesn't start with a slash ("/"), it will be
+ *   positioned in the current route (e.g.: if the current route is "/users" and the `to` prop is
+ *   "20", the link will go to "/users/20", not "/20").
+ * - target: the target of the link.
+ */
+export function Link({ to, target, children }: LinkProps) {
 	const navigate = useNavigate();
 	const route = useContext(SingleRouteContext);
 	const routes = useRoutes();
-	const href = getHref(to, route);
+	const params = useParams();
+	const href = getHref(to, route, params);
 	const onLinkClick = (ev: Event) => {
-		ev.preventDefault();
-		navigate(href);
+		if (!target) {
+			ev.preventDefault();
+			navigate(href);
+		}
 	};
 	const preload = () => {
 		const [route] = getMatch(routes, href.split('#')[0]);
 		if (route && route.lazy) route.lazy();
 	};
-	return html`<a href=${href} @click=${onLinkClick} @mouseenter=${preload} @touchstart=${preload}>
+	return html`<a
+		href=${href}
+		target=${target}
+		@click=${onLinkClick}
+		@mouseenter=${preload}
+		@touchstart=${preload}
+	>
 		${children}
 	</a>`;
 }
@@ -437,15 +569,33 @@ defineWompo(Link, {
 NAV-LINK
 ================================================================
 */
-export function NavLink({ to, children }: LinkProps) {
+/**
+ * This component will render a link to navigate through the routes. You should use this component
+ * instead of a simple `a` tag to navigate through your application, so that you use the pure client
+ * routing system, without fetching the whole page through the server.
+ *
+ * The difference between the `Link` and `NavLink` is that the `NavLink` will have an "active" class
+ * whenever the route associated with the link is actually the current one. This is useful to create
+ * navbars and navigation links in general.
+ *
+ * It accepts the following props:
+ * - to: required. The url of the link. If the link doesn't start with a slash ("/"), it will be
+ *   positioned in the current route (e.g.: if the current route is "/users" and the `to` prop is
+ *   "20", the link will go to "/users/20", not "/20").
+ * - target: the target of the link.
+ */
+export function NavLink({ to, target, children }: LinkProps) {
 	const navigate = useNavigate();
 	const currentRoute = useCurrentRoute();
+	const params = useParams();
 	const routes = useRoutes();
 	const route = useContext(SingleRouteContext);
-	const href = getHref(to, route);
+	const href = getHref(to, route, params);
 	const onLinkClick = (ev: Event) => {
-		ev.preventDefault();
-		navigate(href);
+		if (!target) {
+			ev.preventDefault();
+			navigate(href);
+		}
 	};
 	const preload = () => {
 		const [route] = getMatch(routes, href.split('#')[0]);
@@ -455,6 +605,7 @@ export function NavLink({ to, children }: LinkProps) {
 	return html`<a
 		class=${isActive && 'active'}
 		href=${href}
+		target=${target}
 		@click=${onLinkClick}
 		@mouseenter=${preload}
 		@touchstart=${preload}
@@ -473,21 +624,40 @@ defineWompo(NavLink, {
 HOOKS
 ================================================================
 */
+/**
+ * This hook will return the current url parameters and search parameters of the current route.
+ * Also, the components using this hook will automatically re-render whenver the current route
+ * changes.
+ */
 export const useParams = () => {
 	const routerContext = useContext(RouterContext);
 	return routerContext.params;
 };
 
+/**
+ * This hook will return function that can be used to manually navigate through the routes.
+ * The function accepts two parameters: the new route (which has the same behavior of the "to" prop
+ * in the `Link` component) and then a boolean value (default `true`) to indicate whether the new
+ * route should be pushed or not in the history.
+ */
 export const useNavigate = () => {
 	const routerContext = useContext(RouterContext);
 	return routerContext.setNewRoute;
 };
 
+/**
+ * This hook will return all the data of the current route, and will re-render the component whenver
+ * the current route changes.
+ */
 export const useCurrentRoute = () => {
 	const routerContext = useContext(RouterContext);
 	return routerContext.currentRoute;
 };
 
+/**
+ * This hook will return the whole routes object that the `Routes` component uses to render the
+ * correct routes.
+ */
 export const useRoutes = () => {
 	const routerContext = useContext(RouterContext);
 	return routerContext.routes;
