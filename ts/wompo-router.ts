@@ -301,20 +301,23 @@ export function Routes({ origin, notFoundElement, children }: RoutesProps) {
 	const hash = window.location.hash.split('#')[1];
 	const [route, params] = getMatch(routes, currentRoute);
 
-	const setNewRoute = useCallback((newRoute: string, pushState: boolean = true) => {
-		setCurrentRoute((prevRoute) => {
-			const nextRoute = getHref(newRoute, route, params);
-			const [pathname, hash] = nextRoute.split('#');
-			if (pushState && prevRoute !== nextRoute) {
-				history.pushState({}, null, nextRoute);
-			} else if (!pushState && prevRoute !== nextRoute) {
-				history.replaceState({}, null, nextRoute);
-			}
-			scrollIntoView(hash);
-			if (!nextRoute.startsWith('#')) return pathname;
-			return prevRoute;
-		});
-	});
+	const setNewRoute = useCallback(
+		(newRoute: string, pushState: boolean = true) => {
+			setCurrentRoute((prevRoute) => {
+				const nextRoute = getHref(newRoute, route, params);
+				const [pathname, hash] = nextRoute.split('#');
+				if (pushState && prevRoute !== nextRoute) {
+					history.pushState({}, null, nextRoute);
+				} else if (!pushState && prevRoute !== nextRoute) {
+					history.replaceState({}, null, nextRoute);
+				}
+				scrollIntoView(hash);
+				if (!nextRoute.startsWith('#')) return pathname;
+				return prevRoute;
+			});
+		},
+		[route, params]
+	);
 
 	useEffect(() => {
 		window.addEventListener('popstate', () => {
