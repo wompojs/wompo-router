@@ -4,7 +4,6 @@ import Dashboard from './dashboard.js';
 
 export default function Test() {
 	if (location.pathname.startsWith('/router')) {
-		console.log('Routing');
 		return html`
       <${Routes} origin="/router" notFoundElement=${html`OMGGGG 404 NOT FOUNDDD`}>
         <${Route} path="/" element=${html`<${Dashboard} />`}>

@@ -311,7 +311,8 @@ export function Routes({ origin, notFoundElement, children }: RoutesProps) {
 				history.replaceState({}, null, nextRoute);
 			}
 			scrollIntoView(hash);
-			return pathname;
+			if (!nextRoute.startsWith('#')) return pathname;
+			return prevRoute;
 		});
 	});
 
