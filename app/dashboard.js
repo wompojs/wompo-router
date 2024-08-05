@@ -15,7 +15,8 @@ export default function Dashboard() {
 	return html`
     Emmm??
     <${ChildRoute} />
-    <${Link} to="nested?a=2">Linkk</${Link}>
+    <${Link} to="#">Linkk</${Link}>
+    <${Link} to="#" target="_blank">Linkk</${Link}>
   `;
 }
 
