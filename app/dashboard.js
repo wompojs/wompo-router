@@ -6,16 +6,14 @@ export default function Dashboard() {
 	const navigate = useNavigate();
 	console.log(params);
 
-	/* useEffect(() => {
-		setTimeout(() => {
-			navigate('nested', false);
-		}, 5000);
-	}, []); */
+	useEffect(() => {
+		console.log('initiated');
+	}, []);
 
 	return html`
     Emmm??
     <${ChildRoute} />
-    <${Link} to="#">Linkk</${Link}>
+    <${Link} to="ciao">Linkk</${Link}>
     <${Link} to="#" target="_blank">Linkk</${Link}>
   `;
 }

@@ -158,24 +158,33 @@ const getMatch = (
 				else regex += '(.*?)';
 				paramNames.push(segment.substring(1));
 			} else if (segment === '*') {
-				regex += '(.*)';
+				regex += '(.*)?';
 				paramNames.push('segments');
 			} else {
 				regex += segment;
 			}
 		}
 		const matchRegex = new RegExp(regex, 'g');
-		const match = matchRegex.exec(currentRoute);
+		const routeToMatch =
+			currentRoute + (regex.endsWith('(.*)?') && !currentRoute.endsWith('/') ? '/' : '');
+		const match = matchRegex.exec(routeToMatch);
 		if (match) {
 			const params: Params = {};
 			// Skips first element, which is the whole match
 			for (let i = 1; i < match.length; i++) {
-				if (match[i].includes('?')) {
-					const [param, searchString] = match[i].split('?');
-					match[i] = param;
+				let matchedSegment = match[i] ?? '';
+				if (matchedSegment.includes('?')) {
+					const [param, searchString] = matchedSegment.split('?');
+					matchedSegment = param;
 					params.search = getSearchObject(searchString);
 				}
-				params[paramNames[i - 1]] = match[i];
+				if (paramNames[i - 1] === 'segments') {
+					const segmentsParam = matchedSegment ? matchedSegment.split('/') : [];
+					segmentsParam.pop();
+					params[paramNames[i - 1]] = segmentsParam;
+				} else {
+					params[paramNames[i - 1]] = matchedSegment;
+				}
 			}
 			if (isFallback) matches.fallbacks[routePath] = [route, params];
 			else matches.parametric[routePath] = [route, params];
@@ -508,7 +517,7 @@ const getHref = (to: string, route: RouteStructure, params: Params) => {
 			const parentPath = parentRoute.path;
 			if (parentPath) {
 				const slash = !parentPath.endsWith('/') ? '/' : '';
-				let parentRoutePath = parentRoute.path;
+				let parentRoutePath = parentPath;
 				if (parentRoutePath.includes(':')) {
 					const paths = parentRoutePath.split('/');
 					paths
@@ -517,6 +526,9 @@ const getHref = (to: string, route: RouteStructure, params: Params) => {
 						.forEach((param) => {
 							parentRoutePath = parentRoutePath.replace(`:${param}`, params[param]);
 						});
+				}
+				if (parentRoutePath.includes('*')) {
+					parentRoutePath = parentRoutePath.replace('*', params.segments.join('/'));
 				}
 				href = parentRoutePath + slash + href;
 			}
