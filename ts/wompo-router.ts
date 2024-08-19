@@ -516,7 +516,6 @@ const getHref = (to: string, route: RouteStructure, params: Params) => {
 		while (parentRoute) {
 			const parentPath = parentRoute.path;
 			if (parentPath) {
-				const slash = !parentPath.endsWith('/') ? '/' : '';
 				let parentRoutePath = parentPath;
 				if (parentRoutePath.includes(':')) {
 					const paths = parentRoutePath.split('/');
@@ -530,6 +529,7 @@ const getHref = (to: string, route: RouteStructure, params: Params) => {
 				if (parentRoutePath.includes('*')) {
 					parentRoutePath = parentRoutePath.replace('*', params.segments.join('/'));
 				}
+				const slash = !parentRoutePath.endsWith('/') && !href.startsWith('/') ? '/' : '';
 				href = parentRoutePath + slash + href;
 			}
 			parentRoute = parentRoute.parent;

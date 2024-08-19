@@ -12,6 +12,9 @@ export default function Dashboard() {
 
 	return html`
     Emmm??
+		<button @click=${() => {
+			navigate('236');
+		}}>Ciaooo</button>
     <${ChildRoute} />
     <${Link} to="ciao">Linkk</${Link}>
     <${Link} to="#" target="_blank">Linkk</${Link}>
