@@ -1,6 +1,6 @@
 {
 	"name": "wompo-router",
-	"version": "1.2.0",
+	"version": "1.2.5",
 	"author": "Lorenzo Lannino <lanninolore@gmail.com>",
 	"description": "Wompo-Router allows to create a Single Page Application using Wompo.",
 	"license": "MIT",
