@@ -1,28 +1,397 @@
-import{createContext as z,defineWompo as b,lazy as j,useCallback as M,useContext as k,useEffect as L,useMemo as W,useState as F,Suspense as N,html as y}from"wompo";const A=(t,e,r=[],n=null)=>(e.forEach(c=>{if(c instanceof Route.class){const a=c.props,i=a.lazy?j(a.lazy):null,l=n===null&&t?(a.path.startsWith("/")?a.path.substring(0,a.path.length-1):a.path)+t:a.path,s={...a,parent:n,element:a.element,path:l,lazy:i,fallback:a.fallback,index:null,children:[]};a.index&&(n.index=s),r.push(s),A(t,c.childNodes,s.children,s)}}),r),E=(t,e=[],r="")=>{for(const n of t){let c="";if(n.path){const a=r&&!r.endsWith("/")||!r&&!n.path.startsWith("/")?"/":"";c+=r+a+n.path,e.push([c,n])}n.children&&E(n.children,e,c)}return e},B=t=>{const e=Object.keys(t);return e.sort((r,n)=>{const c=t[r],a=t[n],i=Object.keys(c).filter(o=>o!=="segments").length,s=Object.keys(a).filter(o=>o!=="segments").length-i;if(s===0){let o=r.split("/"),p=n.split("/");const x=p.length-o.length;if(x!==0)return x;let u=0,d=0;for(let h=0;h<o.length;h++){const R=o[h],g=p[h];if(R.startsWith(":")||u++,g.startsWith(":")||d++,R.startsWith(":")||g.startsWith(":")||R.startsWith("*")||g.startsWith("*"))break}return d-u}return s}),t[e[0]]},q=t=>{const e={};return t.split("&").forEach(r=>{const[n,c]=r.split("=");e[n]=c}),e},C=(t,e)=>{const r={exact:null,parametric:{},fallbacks:{}},n=e!=="/"&&e.endsWith("/")?e.substring(0,e.length-1):e;for(const s of t){const[o,p]=s,x=o.endsWith("*");if(!x&&o.split("/").length!==n.split("/").length)continue;if(o===n){r.exact=p;break}if(!o.includes(":")&&!o.includes("*"))continue;const u=o.split("/");let d="";const h=[];for(let m=1;m<u.length;m++){const f=u[m];d+="\\/",f.startsWith(":")?(m===u.length-1?d+="(.*)":d+="(.*?)",h.push(f.substring(1))):f==="*"?(d+="(.*)",h.push("segments")):d+=f}const g=new RegExp(d,"g").exec(n);if(g){const m={};for(let f=1;f<g.length;f++){if(g[f].includes("?")){const[w,O]=g[f].split("?");g[f]=w,m.search=q(O)}m[h[f-1]]=g[f]}x?r.fallbacks[o]=[p,m]:r.parametric[o]=[p,m]}}const c=Object.keys(r.parametric),a=Object.keys(r.fallbacks);let i=[null,null];r.exact?i=[r.exact,{}]:c.length?i=B(r.parametric):a.length&&(i=B(r.fallbacks));const l=i[0]?.redirect||i[0]?.index?.redirect;if(l){const s=$(l,i[0],i[1]);history.replaceState({},void 0,s),i=C(t,s)}return i},H=t=>t?y`
-		<${P.Provider} value=${{...t}}>
-			${t.lazy?t.fallback?y`
-							<${N} fallback=${t.fallback}>
-								<${t.lazy} />
-							</${N}>
-						`:y`<${t.lazy} />`:t.element}
-		</${P.Provider}>
-	`:null,S=z({params:null,hash:null,currentRoute:null,setNewRoute:null,routes:[]}),v=t=>{if(t){const e=document.getElementById(t);e&&e.scrollIntoView({block:"start",behavior:"smooth"})}};export function Routes({origin:t,notFoundElement:e,children:r}){const[n,c]=F(window.location.pathname),a=W(()=>A(t,r.nodes),[]),i=W(()=>E(a),[]),l=window.location.hash.split("#")[1],[s,o]=C(i,n),p=M((h,R=!0)=>{c(g=>{const m=$(h,s,o),[f,w]=m.split("#");return R&&g!==m?history.pushState({},null,m):!R&&g!==m&&history.replaceState({},null,m),v(w),f})});L(()=>{window.addEventListener("popstate",()=>{p(window.location.pathname,!1)})},[]),L(()=>{window.scrollTo(0,0),s?.lazy?s.lazy().then(()=>{setTimeout(()=>{v(l)})}):v(l)},[n]);const x=W(()=>({hash:l,params:o,currentRoute:n,setNewRoute:p,routes:i}),[n]);let u={notFound:!0};if(s){if(u=s,s.meta?.title){document.title=s.meta.title;const h=document.querySelector('meta[property="og:title"]');h&&h.setAttribute("content",s.meta.title)}if(s.meta?.description){const h=document.querySelector('meta[name="description"]');h&&h.setAttribute("content",s.meta.description);const R=document.querySelector('meta[property="og:description"]');R&&R.setAttribute("content",s.meta.description)}}let d=null;for(u.nextRoute=d;u.parent;)d=u,u=u.parent,u.nextRoute=d;return y`<${S.Provider} value=${x}>
-		${u.notFound?e??y`<div class="wompo-router-not-found">Not found!</div>`:H(u)}
-	</${S.Provider}>`}b(Routes,{name:"womp-routes"});const P=z(null);export function Route(t){return y``}b(Route,{name:"wompo-route"});export function ChildRoute(){const t=k(P);let e=null;if(t){const r=t.nextRoute;r?e=r:t.index&&(e=t.index)}return H(e)}b(ChildRoute,{name:"wompo-child-route"});const $=(t,e,r)=>{let n=t;if(!n.startsWith("/")&&!n.startsWith("#")&&e){let c=e;for(;c;){const a=c.path;if(a){const i=a.endsWith("/")?"":"/";let l=c.path;l.includes(":")&&l.split("/").filter(o=>o.startsWith(":")).map(o=>o.substring(1)).forEach(o=>{l=l.replace(`:${o}`,r[o])}),n=l+i+n}c=c.parent}}return n};export function Link({to:t,target:e,children:r}){const n=useNavigate(),c=k(P),a=useRoutes(),i=useParams(),l=$(t,c,i),s=p=>{e||(p.preventDefault(),n(l))},o=()=>{const[p]=C(a,l.split("#")[0]);p&&p.lazy&&p.lazy()};return y`<a
-		href=${l}
-		target=${e}
-		@click=${s}
-		@mouseenter=${o}
-		@touchstart=${o}
+import {
+  createContext,
+  defineWompo,
+  lazy,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  Suspense,
+  html
+} from "wompo";
+const buildTreeStructure = (origin, childNodes, structure = [], parent = null) => {
+  childNodes.forEach((child) => {
+    if (child instanceof Route.class) {
+      const props = child.props;
+      const lazyComp = props.lazy ? lazy(props.lazy) : null;
+      const path = parent === null && origin ? (props.path.startsWith("/") ? props.path.substring(0, props.path.length - 1) : props.path) + origin : props.path;
+      const route = {
+        ...props,
+        parent,
+        element: props.element,
+        path,
+        lazy: lazyComp,
+        fallback: props.fallback,
+        index: null,
+        children: []
+      };
+      if (props.index)
+        parent.index = route;
+      structure.push(route);
+      buildTreeStructure(origin, child.childNodes, route.children, route);
+    }
+  });
+  return structure;
+};
+const getRoutes = (treeStructure, paths = [], parent = "") => {
+  for (const route of treeStructure) {
+    let newRoute = "";
+    if (route.path) {
+      const slash = parent && !parent.endsWith("/") || !parent && !route.path.startsWith("/") ? "/" : "";
+      newRoute += parent + slash + route.path;
+      paths.push([newRoute, route]);
+    }
+    if (route.children) {
+      getRoutes(route.children, paths, newRoute);
+    }
+  }
+  return paths;
+};
+const getWichParametricRouteisMoreSpecific = (routes) => {
+  const parametricPaths = Object.keys(routes);
+  parametricPaths.sort((a, b) => {
+    const matchA = routes[a];
+    const matchB = routes[b];
+    const dynamicsA = Object.keys(matchA).filter((key) => key !== "segments").length;
+    const dynamicsB = Object.keys(matchB).filter((key) => key !== "segments").length;
+    const difference = dynamicsB - dynamicsA;
+    if (difference === 0) {
+      let staticsA = a.split("/");
+      let staticsB = b.split("/");
+      const lengthDifference = staticsB.length - staticsA.length;
+      if (lengthDifference !== 0)
+        return lengthDifference;
+      let staticsALength = 0;
+      let staticsBLength = 0;
+      for (let i = 0; i < staticsA.length; i++) {
+        const sA = staticsA[i];
+        const sB = staticsB[i];
+        if (!sA.startsWith(":"))
+          staticsALength++;
+        if (!sB.startsWith(":"))
+          staticsBLength++;
+        if (sA.startsWith(":") || sB.startsWith(":") || sA.startsWith("*") || sB.startsWith("*"))
+          break;
+      }
+      return staticsBLength - staticsALength;
+    }
+    return difference;
+  });
+  return routes[parametricPaths[0]];
+};
+const getSearchObject = (searchString) => {
+  const search = {};
+  searchString.split("&").forEach((keyVal) => {
+    const [key, value] = keyVal.split("=");
+    search[key] = value;
+  });
+  return search;
+};
+const getMatch = (routes, broswerRoute) => {
+  const matches = {
+    exact: null,
+    parametric: {},
+    fallbacks: {}
+  };
+  const currentRoute = broswerRoute !== "/" && broswerRoute.endsWith("/") ? broswerRoute.substring(0, broswerRoute.length - 1) : broswerRoute;
+  for (const routeStructure of routes) {
+    const [routePath, route] = routeStructure;
+    const isFallback = routePath.endsWith("*");
+    if (!isFallback && routePath.split("/").length !== currentRoute.split("/").length)
+      continue;
+    if (routePath === currentRoute) {
+      matches.exact = route;
+      break;
+    }
+    if (!routePath.includes(":") && !routePath.includes("*"))
+      continue;
+    const segments = routePath.split("/");
+    let regex = "";
+    const paramNames = [];
+    for (let i = 1; i < segments.length; i++) {
+      const segment = segments[i];
+      regex += "\\/";
+      if (segment.startsWith(":")) {
+        if (i === segments.length - 1)
+          regex += "(.*)";
+        else
+          regex += "(.*?)";
+        paramNames.push(segment.substring(1));
+      } else if (segment === "*") {
+        regex += "(.*)";
+        paramNames.push("segments");
+      } else {
+        regex += segment;
+      }
+    }
+    const matchRegex = new RegExp(regex, "g");
+    const match2 = matchRegex.exec(currentRoute);
+    if (match2) {
+      const params = {};
+      for (let i = 1; i < match2.length; i++) {
+        if (match2[i].includes("?")) {
+          const [param, searchString] = match2[i].split("?");
+          match2[i] = param;
+          params.search = getSearchObject(searchString);
+        }
+        params[paramNames[i - 1]] = match2[i];
+      }
+      if (isFallback)
+        matches.fallbacks[routePath] = [route, params];
+      else
+        matches.parametric[routePath] = [route, params];
+    }
+  }
+  const parametricPaths = Object.keys(matches.parametric);
+  const fallbackPaths = Object.keys(matches.fallbacks);
+  let match = [null, null];
+  if (matches.exact) {
+    match = [matches.exact, {}];
+  } else if (parametricPaths.length) {
+    match = getWichParametricRouteisMoreSpecific(matches.parametric);
+  } else if (fallbackPaths.length) {
+    match = getWichParametricRouteisMoreSpecific(matches.fallbacks);
+  }
+  const redirect = match[0]?.redirect || match[0]?.index?.redirect;
+  if (redirect) {
+    const newPath = getHref(redirect, match[0], match[1]);
+    history.replaceState({}, void 0, newPath);
+    match = getMatch(routes, newPath);
+  }
+  return match;
+};
+const getRouteContent = (route) => {
+  if (!route)
+    return null;
+  return html`
+		<${SingleRouteContext.Provider} value=${{ ...route }}>
+			${route.lazy ? route.fallback ? html`
+							<${Suspense} fallback=${route.fallback}>
+								<${route.lazy} />
+							</${Suspense}>
+						` : html`<${route.lazy} />` : route.element}
+		</${SingleRouteContext.Provider}>
+	`;
+};
+const RouterContext = createContext({
+  params: null,
+  hash: null,
+  currentRoute: null,
+  setNewRoute: null,
+  routes: []
+});
+const scrollIntoView = (hash) => {
+  if (hash) {
+    const element = document.getElementById(hash);
+    if (element)
+      element.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+};
+export function Routes({ origin, notFoundElement, children }) {
+  const [currentRoute, setCurrentRoute] = useState(window.location.pathname);
+  const treeStructure = useMemo(() => {
+    const tree = buildTreeStructure(origin, children.nodes);
+    return tree;
+  }, []);
+  const routes = useMemo(() => getRoutes(treeStructure), []);
+  const hash = window.location.hash.split("#")[1];
+  const [route, params] = getMatch(routes, currentRoute);
+  const setNewRoute = useCallback((newRoute, pushState = true) => {
+    setCurrentRoute((prevRoute) => {
+      const nextRoute2 = getHref(newRoute, route, params);
+      const [pathname, hash2] = nextRoute2.split("#");
+      if (pushState && prevRoute !== nextRoute2) {
+        history.pushState({}, null, nextRoute2);
+      } else if (!pushState && prevRoute !== nextRoute2) {
+        history.replaceState({}, null, nextRoute2);
+      }
+      scrollIntoView(hash2);
+      return pathname;
+    });
+  });
+  useEffect(() => {
+    window.addEventListener("popstate", () => {
+      setNewRoute(window.location.pathname, false);
+    });
+  }, []);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    if (route?.lazy) {
+      route.lazy().then(() => {
+        setTimeout(() => {
+          scrollIntoView(hash);
+        });
+      });
+    } else {
+      scrollIntoView(hash);
+    }
+  }, [currentRoute]);
+  const context = useMemo(
+    () => ({
+      hash,
+      params,
+      currentRoute,
+      setNewRoute,
+      routes
+    }),
+    [currentRoute]
+  );
+  let root = { notFound: true };
+  if (route) {
+    root = route;
+    if (route.meta?.title) {
+      document.title = route.meta.title;
+      const ogMeta = document.querySelector('meta[property="og:title"]');
+      if (ogMeta)
+        ogMeta.setAttribute("content", route.meta.title);
+    }
+    if (route.meta?.description) {
+      const meta = document.querySelector('meta[name="description"]');
+      if (meta)
+        meta.setAttribute("content", route.meta.description);
+      const ogMeta = document.querySelector('meta[property="og:description"]');
+      if (ogMeta)
+        ogMeta.setAttribute("content", route.meta.description);
+    }
+  }
+  let nextRoute = null;
+  root.nextRoute = nextRoute;
+  while (root.parent) {
+    nextRoute = root;
+    root = root.parent;
+    root.nextRoute = nextRoute;
+  }
+  return html`<${RouterContext.Provider} value=${context}>
+		${root.notFound ? notFoundElement ?? html`<div class="wompo-router-not-found">Not found!</div>` : getRouteContent(root)}
+	</${RouterContext.Provider}>`;
+}
+defineWompo(Routes, {
+  name: "womp-routes"
+});
+const SingleRouteContext = createContext(null);
+export function Route(_) {
+  return html``;
+}
+defineWompo(Route, {
+  name: "wompo-route"
+});
+export function ChildRoute() {
+  const route = useContext(SingleRouteContext);
+  let toRender = null;
+  if (route) {
+    const newRoute = route.nextRoute;
+    if (newRoute) {
+      toRender = newRoute;
+    } else if (route.index) {
+      toRender = route.index;
+    }
+  }
+  return getRouteContent(toRender);
+}
+defineWompo(ChildRoute, {
+  name: "wompo-child-route"
+});
+const getHref = (to, route, params) => {
+  let href = to;
+  if (!href.startsWith("/") && !href.startsWith("#") && route) {
+    let parentRoute = route;
+    while (parentRoute) {
+      const parentPath = parentRoute.path;
+      if (parentPath) {
+        const slash = !parentPath.endsWith("/") ? "/" : "";
+        let parentRoutePath = parentRoute.path;
+        if (parentRoutePath.includes(":")) {
+          const paths = parentRoutePath.split("/");
+          paths.filter((p) => p.startsWith(":")).map((p) => p.substring(1)).forEach((param) => {
+            parentRoutePath = parentRoutePath.replace(`:${param}`, params[param]);
+          });
+        }
+        href = parentRoutePath + slash + href;
+      }
+      parentRoute = parentRoute.parent;
+    }
+  }
+  return href;
+};
+export function Link({ to, target, children }) {
+  const navigate = useNavigate();
+  const route = useContext(SingleRouteContext);
+  const routes = useRoutes();
+  const params = useParams();
+  const href = getHref(to, route, params);
+  const onLinkClick = (ev) => {
+    if (!target) {
+      ev.preventDefault();
+      navigate(href);
+    }
+  };
+  const preload = () => {
+    const [route2] = getMatch(routes, href.split("#")[0]);
+    if (route2 && route2.lazy)
+      route2.lazy();
+  };
+  return html`<a
+		href=${href}
+		target=${target}
+		@click=${onLinkClick}
+		@mouseenter=${preload}
+		@touchstart=${preload}
 	>
-		${r}
-	</a>`}Link.css=":host { display: inline-block; }",b(Link,{name:"wompo-link"});export function NavLink({to:t,target:e,children:r}){const n=useNavigate(),c=useCurrentRoute(),a=useParams(),i=useRoutes(),l=k(P),s=$(t,l,a),o=u=>{e||(u.preventDefault(),n(s))},p=()=>{const[u]=C(i,s.split("#")[0]);u&&u.lazy&&u.lazy()};return y`<a
-		class=${c===s&&"active"}
-		href=${s}
-		target=${e}
-		@click=${o}
-		@mouseenter=${p}
-		@touchstart=${p}
+		${children}
+	</a>`;
+}
+Link.css = `:host { display: inline-block; }`;
+defineWompo(Link, {
+  name: "wompo-link"
+});
+export function NavLink({ to, target, children }) {
+  const navigate = useNavigate();
+  const currentRoute = useCurrentRoute();
+  const params = useParams();
+  const routes = useRoutes();
+  const route = useContext(SingleRouteContext);
+  const href = getHref(to, route, params);
+  const onLinkClick = (ev) => {
+    if (!target) {
+      ev.preventDefault();
+      navigate(href);
+    }
+  };
+  const preload = () => {
+    const [route2] = getMatch(routes, href.split("#")[0]);
+    if (route2 && route2.lazy)
+      route2.lazy();
+  };
+  const isActive = currentRoute === href;
+  return html`<a
+		class=${isActive && "active"}
+		href=${href}
+		target=${target}
+		@click=${onLinkClick}
+		@mouseenter=${preload}
+		@touchstart=${preload}
 	>
-		${r}
-	</a>`}NavLink.css=":host { display: inline-block; }",b(NavLink,{name:"wompo-nav-link"});export const useParams=()=>k(S).params,useNavigate=()=>k(S).setNewRoute,useCurrentRoute=()=>k(S).currentRoute,useRoutes=()=>k(S).routes;
+		${children}
+	</a>`;
+}
+NavLink.css = `:host { display: inline-block; }`;
+defineWompo(NavLink, {
+  name: "wompo-nav-link"
+});
+export const useParams = () => {
+  const routerContext = useContext(RouterContext);
+  return routerContext.params;
+};
+export const useNavigate = () => {
+  const routerContext = useContext(RouterContext);
+  return routerContext.setNewRoute;
+};
+export const useCurrentRoute = () => {
+  const routerContext = useContext(RouterContext);
+  return routerContext.currentRoute;
+};
+export const useRoutes = () => {
+  const routerContext = useContext(RouterContext);
+  return routerContext.routes;
+};
