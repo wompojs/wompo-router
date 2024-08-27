@@ -112,12 +112,13 @@ const getWichParametricRouteisMoreSpecific = (routes: Params) => {
 };
 
 const getSearchObject = (searchString: string) => {
-	const search: any = {};
-	searchString.split('&').forEach((keyVal) => {
-		const [key, value] = keyVal.split('=');
-		search[key] = value;
+	if (!searchString) return {};
+	const params: any = {};
+	searchString.split('&').forEach((el) => {
+		const [key, value] = el.split('=');
+		params[key] = value;
 	});
-	return search;
+	return params;
 };
 
 const getMatch = (
@@ -133,10 +134,11 @@ const getMatch = (
 		parametric: {},
 		fallbacks: {},
 	};
-	const currentRoute =
+	const bRoute =
 		broswerRoute !== '/' && broswerRoute.endsWith('/')
 			? broswerRoute.substring(0, broswerRoute.length - 1)
 			: broswerRoute;
+	const [currentRoute, search] = bRoute.split('?');
 	for (const routeStructure of routes) {
 		const [routePath, route] = routeStructure;
 		const isFallback = routePath.endsWith('*');
@@ -173,11 +175,6 @@ const getMatch = (
 			// Skips first element, which is the whole match
 			for (let i = 1; i < match.length; i++) {
 				let matchedSegment = match[i] ?? '';
-				if (matchedSegment.includes('?')) {
-					const [param, searchString] = matchedSegment.split('?');
-					matchedSegment = param;
-					params.search = getSearchObject(searchString);
-				}
 				if (paramNames[i - 1] === 'segments') {
 					const segmentsParam = matchedSegment ? matchedSegment.split('/') : [];
 					segmentsParam.pop();
@@ -206,6 +203,7 @@ const getMatch = (
 		history.replaceState({}, undefined, newPath);
 		match = getMatch(routes, newPath);
 	}
+	if (match[1]) match[1].search = getSearchObject(search);
 	return match;
 };
 
@@ -299,7 +297,9 @@ const scrollIntoView = (hash: string) => {
  * ```
  */
 export function Routes({ origin, notFoundElement, children }: RoutesProps) {
-	const [currentRoute, setCurrentRoute] = useState(window.location.pathname);
+	const [currentRoute, setCurrentRoute] = useState(
+		window.location.pathname + window.location.search
+	);
 
 	const treeStructure = useMemo(() => {
 		const tree = buildTreeStructure(origin, children.nodes);
