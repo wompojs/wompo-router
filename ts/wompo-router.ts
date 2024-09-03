@@ -66,6 +66,7 @@ const getRoutes = (
 			const slash =
 				(parent && !parent.endsWith('/')) || (!parent && !route.path.startsWith('/')) ? '/' : '';
 			newRoute += parent + slash + route.path;
+			route.fullPath = newRoute;
 			paths.push([newRoute, route]);
 		}
 		if (route.children) {
@@ -240,6 +241,7 @@ interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'>
 	parent: RouteStructure;
 	element: RenderHtml;
 	path: string;
+	fullPath?: string;
 	children: RouteStructure[];
 	index: RouteStructure;
 	nextRoute?: RouteStructure;
@@ -253,6 +255,7 @@ interface RouterContext {
 	currentRoute: string;
 	setNewRoute: (newValue: string, push?: boolean) => void;
 	routes: [string, RouteStructure][];
+	route: RouteStructure;
 }
 const RouterContext = createContext<RouterContext>({
 	params: null,
@@ -260,6 +263,7 @@ const RouterContext = createContext<RouterContext>({
 	currentRoute: null,
 	setNewRoute: null,
 	routes: [],
+	route: null,
 });
 
 const scrollIntoView = (hash: string) => {
@@ -355,6 +359,7 @@ export function Routes({ origin, notFoundElement, children }: RoutesProps) {
 				currentRoute: currentRoute,
 				setNewRoute: setNewRoute,
 				routes: routes,
+				route: route,
 			} as RouterContext),
 		[currentRoute]
 	);
@@ -392,7 +397,7 @@ export function Routes({ origin, notFoundElement, children }: RoutesProps) {
 }
 
 defineWompo(Routes, {
-	name: 'womp-routes',
+	name: 'wompo-routes',
 });
 
 /* 
@@ -662,12 +667,20 @@ export const useNavigate = () => {
 };
 
 /**
- * This hook will return all the data of the current route, and will re-render the component whenver
- * the current route changes.
+ * This hook will return the current path, and will re-render the component whenever it changes.
  */
 export const useCurrentRoute = () => {
 	const routerContext = useContext(RouterContext);
 	return routerContext.currentRoute;
+};
+
+/**
+ * This hook will return all the data of the current route, and will re-render the component
+ * whenever the current route changes.
+ */
+export const useRoute = () => {
+	const routerContext = useContext(RouterContext);
+	return routerContext.route;
 };
 
 /**

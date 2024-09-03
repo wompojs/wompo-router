@@ -7,6 +7,7 @@ interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'>
     parent: RouteStructure;
     element: RenderHtml;
     path: string;
+    fullPath?: string;
     children: RouteStructure[];
     index: RouteStructure;
     nextRoute?: RouteStructure;
@@ -159,10 +160,14 @@ export declare const useParams: () => any;
  */
 export declare const useNavigate: () => (newValue: string, push?: boolean) => void;
 /**
- * This hook will return all the data of the current route, and will re-render the component whenver
- * the current route changes.
+ * This hook will return the current path, and will re-render the component whenever it changes.
  */
 export declare const useCurrentRoute: () => string;
+/**
+ * This hook will return all the data of the current route, and will re-render the component
+ * whenever the current route changes.
+ */
+export declare const useRoute: () => RouteStructure;
 /**
  * This hook will return the whole routes object that the `Routes` component uses to render the
  * correct routes.
