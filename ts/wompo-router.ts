@@ -208,11 +208,11 @@ const getMatch = (
 };
 
 const getRouteContent = (route: RouteStructure) => {
-	if (!route) return null;
+	// if (!route) return null;
 	return html`
 		<${SingleRouteContext.Provider} value=${{ ...route }}>
 			${
-				route.lazy
+				route?.lazy
 					? route.fallback
 						? html`
 							<${Suspense} fallback=${route.fallback}>
@@ -220,7 +220,7 @@ const getRouteContent = (route: RouteStructure) => {
 							</${Suspense}>
 						`
 						: html`<${route.lazy} />`
-					: route.element
+					: route?.element
 			}
 		</${SingleRouteContext.Provider}>
 	`;
