@@ -1,4 +1,11 @@
-import { type LazyCallbackResult, type LazyResult, RenderHtml, WompoProps } from 'wompo';
+import { type LazyCallbackResult, type LazyResult, type RenderHtml, type WompoProps } from 'wompo';
+interface Params {
+    segments?: string[];
+    search?: {
+        [key: string]: any;
+    };
+    [key: string]: any;
+}
 interface RoutesProps extends WompoProps {
     notFoundElement?: RenderHtml;
     origin?: string;
@@ -151,7 +158,7 @@ export declare namespace NavLink {
  * Also, the components using this hook will automatically re-render whenver the current route
  * changes.
  */
-export declare const useParams: () => any;
+export declare const useParams: () => Params;
 /**
  * This hook will return function that can be used to manually navigate through the routes.
  * The function accepts two parameters: the new route (which has the same behavior of the "to" prop

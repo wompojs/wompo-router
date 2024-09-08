@@ -1,24 +1,58 @@
-import { defineWompo, html, useEffect } from 'wompo';
+import { defineWompo, html, useEffect, useLayoutEffect } from 'wompo';
 import { ChildRoute, Link, useNavigate, useParams } from '../dist/wompo-router.js';
+
+function Widget({ remove }) {
+	if (remove) {
+		const parent = this.parentElement;
+		Promise.resolve().then(() => {
+			parent.remove();
+		});
+		return null;
+	}
+	return html` <p>WIDGET</p> `;
+}
+defineWompo(Widget);
 
 export default function Dashboard() {
 	const params = useParams();
-	const navigate = useNavigate();
+
 	console.log(params);
 
 	useEffect(() => {
-		console.log('initiated');
+		return () => {
+			console.log('disconnected dashboard');
+		};
 	}, []);
 
+	useEffect(() => {
+		console.log('dashboard');
+	});
+
 	return html`
-    Emmm??
-		<button @click=${() => {
-			navigate('236');
-		}}>Ciaooo</button>
-    <${ChildRoute} />
-    <${Link} to="ciao">Linkk</${Link}>
-    <${Link} to="#" target="_blank">Linkk</${Link}>
-  `;
+		<h1>DASHBOARD</h1>
+		<${ChildRoute} />
+		<p>
+			<${Widget} />
+		</p>
+		<p>
+			<${Widget} />
+		</p>
+		<p>
+			<${Widget} remove />
+		</p>
+		<p>
+			<${Widget} />
+		</p>
+		${params.segments.map((el) => html`<p>${el}</p>`)}
+	`;
 }
+
+Dashboard.css = `
+	p {
+		background-color: black;
+		padding: 20px;
+		color: white;
+	}
+`;
 
 defineWompo(Dashboard);

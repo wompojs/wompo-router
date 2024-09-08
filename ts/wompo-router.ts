@@ -1,9 +1,9 @@
 import {
 	type LazyCallbackResult,
 	type LazyResult,
-	RenderHtml,
-	WompoComponent,
-	WompoProps,
+	type RenderHtml,
+	type WompoComponent,
+	type WompoProps,
 	createContext,
 	defineWompo,
 	lazy,
@@ -250,7 +250,7 @@ interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'>
 }
 
 interface RouterContext {
-	params: any;
+	params: Params;
 	hash?: string;
 	currentRoute: string;
 	setNewRoute: (newValue: string, push?: boolean) => void;

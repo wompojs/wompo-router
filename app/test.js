@@ -19,15 +19,7 @@ defineWompo(Elem);
 export default function Test() {
 	return html`
     <${Routes} notFoundElement=${html`OMGGGG 404 NOT FOUNDDD`}>
-      <${Route} path="/" element=${html`<${Elem} />`}>
-        <${Route} path="file-manager/*" element=${html`<${Dashboard} />`} />
-        <${Route} path="a" element=${html`AAAA`}>
-          <${Route} path="b" element=${html`BBBB`} />
-        </${Route}>
-      </${Route}>
-      <${Route} path="/:key" element=${html`<h1>AAAA</h1>`} />
-      <${Route} path="/:key/code" element=${html`<h1>CODE</h1>`} />
-      <${Route} path="/:key/*" element=${html`<${Dashboard} />`} />
+      <${Route} path="*" element=${html`<${Dashboard} />`} />
     </${Routes}>
   `;
 }
