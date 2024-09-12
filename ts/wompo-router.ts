@@ -208,10 +208,10 @@ const getMatch = (
 	return match;
 };
 
-const getRouteContent = (route: RouteStructure) => {
-	// if (!route) return null;
+const getRouteContent = (router: RouterContext) => {
+	const route = router.singleRoute;
 	return html`
-		<${SingleRouteContext.Provider} value=${{ ...route }}>
+		<${RouterContext.Provider} value=${router}>
 			${
 				route?.lazy
 					? route.fallback
@@ -223,7 +223,7 @@ const getRouteContent = (route: RouteStructure) => {
 						: html`<${route.lazy} />`
 					: route?.element
 			}
-		</${SingleRouteContext.Provider}>
+		</${RouterContext.Provider}>
 	`;
 };
 
@@ -256,6 +256,7 @@ interface RouterContext {
 	setNewRoute: (newValue: string, push?: boolean) => void;
 	routes: [string, RouteStructure][];
 	route: RouteStructure;
+	singleRoute: RouteStructure;
 }
 const RouterContext = createContext<RouterContext>({
 	params: null,
@@ -264,6 +265,7 @@ const RouterContext = createContext<RouterContext>({
 	setNewRoute: null,
 	routes: [],
 	route: null,
+	singleRoute: null,
 });
 
 const scrollIntoView = (hash: string) => {
@@ -364,7 +366,7 @@ export function Routes({ origin, notFoundElement, children }: RoutesProps) {
 		[currentRoute]
 	);
 
-	let root = { notFound: true } as any;
+	let root: RouteStructure = { notFound: true } as any;
 	if (route) {
 		root = route;
 		if (route.meta?.title) {
@@ -387,11 +389,19 @@ export function Routes({ origin, notFoundElement, children }: RoutesProps) {
 		root.nextRoute = nextRoute;
 	}
 
+	const nextRouteCtx: RouterContext = useMemo(
+		() => ({
+			...context,
+			singleRoute: root,
+		}),
+		[currentRoute]
+	);
+
 	return html`<${RouterContext.Provider} value=${context}>
 		${
-			root.notFound
+			(root as any).notFound
 				? notFoundElement ?? html`<div class="wompo-router-not-found">Not found!</div>`
-				: getRouteContent(root)
+				: getRouteContent(nextRouteCtx)
 		}
 	</${RouterContext.Provider}>`;
 }
@@ -405,8 +415,6 @@ defineWompo(Routes, {
 ROUTE
 ================================================================
 */
-
-const SingleRouteContext = createContext<RouteStructure>(null);
 
 interface RouteProps extends WompoProps {
 	path?: string;
@@ -487,7 +495,8 @@ CHILD-ROUTE
  * The child route will allow to render the `UsersList` and the `UserDetails` components.
  */
 export function ChildRoute() {
-	const route = useContext(SingleRouteContext);
+	const router = useContext(RouterContext);
+	const route = router.singleRoute;
 	let toRender: RouteStructure = null;
 	if (route) {
 		const newRoute = route.nextRoute;
@@ -497,7 +506,16 @@ export function ChildRoute() {
 			toRender = route.index;
 		}
 	}
-	return getRouteContent(toRender);
+	const childRouter = useMemo(
+		(): RouterContext =>
+			({
+				...router,
+				singleRoute: toRender,
+			} as RouterContext),
+		[router]
+	);
+
+	return getRouteContent(childRouter);
 }
 
 defineWompo(ChildRoute, {
@@ -556,10 +574,10 @@ const getHref = (to: string, route: RouteStructure, params: Params) => {
  */
 export function Link({ to, target, children }: LinkProps) {
 	const navigate = useNavigate();
-	const route = useContext(SingleRouteContext);
+	const { singleRoute } = useContext(RouterContext);
 	const routes = useRoutes();
 	const params = useParams();
-	const href = getHref(to, route, params);
+	const href = getHref(to, singleRoute, params);
 	const onLinkClick = (ev: Event) => {
 		if (!target) {
 			ev.preventDefault();
@@ -610,8 +628,8 @@ export function NavLink({ to, target, children }: LinkProps) {
 	const currentRoute = useCurrentRoute();
 	const params = useParams();
 	const routes = useRoutes();
-	const route = useContext(SingleRouteContext);
-	const href = getHref(to, route, params);
+	const { singleRoute } = useContext(RouterContext);
+	const href = getHref(to, singleRoute, params);
 	const onLinkClick = (ev: Event) => {
 		if (!target) {
 			ev.preventDefault();

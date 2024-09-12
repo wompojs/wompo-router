@@ -1,6 +1,6 @@
 {
 	"name": "wompo-router",
-	"version": "1.3.2",
+	"version": "1.3.3",
 	"author": "Lorenzo Lannino <lanninolore@gmail.com>",
 	"description": "Wompo-Router allows to create a Single Page Application using Wompo.",
 	"license": "MIT",
@@ -17,8 +17,8 @@
 	},
 	"homepage": "https://github.com/wompojs/wompo-router",
 	"scripts": {
-		"dev": "esbuild ts/wompo-router.ts --outdir=dist --allow-overwrite --watch",
-		"build": "tsc & esbuild ts/wompo-router.ts --minify --outdir=dist --allow-overwrite",
+		"dev": "esbuild ts/wompo-router.ts --outdir=dist --sourcemap --allow-overwrite --watch",
+		"build": "tsc & esbuild ts/wompo-router.ts --minify --sourcemap --outdir=dist --allow-overwrite",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
 	"exports": {
