@@ -258,15 +258,18 @@ interface RouterContext {
 	route: RouteStructure;
 	singleRoute: RouteStructure;
 }
-const RouterContext = createContext<RouterContext>({
-	params: null,
-	hash: null,
-	currentRoute: null,
-	setNewRoute: null,
-	routes: [],
-	route: null,
-	singleRoute: null,
-});
+const RouterContext = createContext<RouterContext>(
+	{
+		params: null,
+		hash: null,
+		currentRoute: null,
+		setNewRoute: null,
+		routes: [],
+		route: null,
+		singleRoute: null,
+	},
+	'wompo-route-context'
+);
 
 const scrollIntoView = (hash: string) => {
 	if (hash) {
