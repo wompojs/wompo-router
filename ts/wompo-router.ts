@@ -3,6 +3,7 @@ import {
 	type LazyResult,
 	type RenderHtml,
 	type WompoComponent,
+	type WompoElement,
 	type WompoProps,
 	createContext,
 	defineWompo,
@@ -16,27 +17,48 @@ import {
 	html,
 } from 'wompo';
 
-/* 
+/*
 ================================================================
 HELPERS
 ================================================================
 */
+/**
+ * Normalizes the `origin` prop into a canonical prefix: it always starts with a slash and never
+ * ends with one (e.g. "subapp/" and "/subapp" both become "/subapp"). Any falsy or root-only value
+ * ("", null, undefined, "/", whitespace) is collapsed to an empty string, which disables every
+ * origin-aware behavior across the router.
+ */
+const normalizeOrigin = (origin: string | null | undefined): string => {
+	// Be defensive about non-string values: an `origin` prop written as `origin=""` or a bare
+	// `origin` is coerced to the boolean `true` by the template, and should mean "no origin".
+	if (!origin || typeof origin !== 'string') return '';
+	let normalized = origin.trim();
+	if (!normalized.startsWith('/')) normalized = `/${normalized}`;
+	while (normalized.length > 1 && normalized.endsWith('/')) {
+		normalized = normalized.substring(0, normalized.length - 1);
+	}
+	return normalized === '/' ? '' : normalized;
+};
+
 const buildTreeStructure = (
-	origin: string | null,
+	origin: string,
 	childNodes: Node[] | NodeList,
 	structure: RouteStructure[] = [],
-	parent: RouteStructure = null
+	parent: RouteStructure | null = null
 ): RouteStructure[] => {
+	const routeClass = (Route as WompoComponent).class;
 	childNodes.forEach((child) => {
-		if (child instanceof (Route as WompoComponent).class) {
-			const props = child.props as RouteProps;
+		if (routeClass && child instanceof routeClass) {
+			const props = (child as WompoElement).props as RouteProps;
 			const lazyComp = props.lazy ? lazy(props.lazy) : null;
-			const path =
-				parent === null && origin
-					? (props.path.startsWith('/')
-							? props.path.substring(0, props.path.length - 1)
-							: props.path) + origin
-					: props.path;
+			// Top-level routes are prefixed with the (normalized) origin so that the browser url —
+			// which always includes the origin — can be matched against the built routes. Nested
+			// routes inherit the origin automatically through their parent's path.
+			let path = props.path;
+			if (parent === null && origin && path) {
+				const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+				path = normalizedPath === '/' ? origin : origin + normalizedPath;
+			}
 			const route: RouteStructure = {
 				...props,
 				parent: parent,
@@ -47,7 +69,7 @@ const buildTreeStructure = (
 				index: null,
 				children: [],
 			};
-			if (props.index) parent.index = route;
+			if (props.index && parent) parent.index = route;
 			structure.push(route);
 			buildTreeStructure(origin, child.childNodes, route.children, route);
 		}
@@ -124,12 +146,13 @@ const getSearchObject = (searchString: string) => {
 
 const getMatch = (
 	routes: [string, RouteStructure][],
-	broswerRoute: string
-): [RouteStructure, Params] => {
+	broswerRoute: string,
+	origin: string = ''
+): [RouteStructure | null, Params | null] => {
 	const matches: {
-		exact?: RouteStructure;
-		parametric?: Params;
-		fallbacks?: Params;
+		exact: RouteStructure | null;
+		parametric: Params;
+		fallbacks: Params;
 	} = {
 		exact: null,
 		parametric: {},
@@ -190,7 +213,7 @@ const getMatch = (
 	}
 	const parametricPaths = Object.keys(matches.parametric);
 	const fallbackPaths = Object.keys(matches.fallbacks);
-	let match: [RouteStructure, Params] = [null, null];
+	let match: [RouteStructure | null, Params | null] = [null, null];
 	if (matches.exact) {
 		match = [matches.exact, {}];
 	} else if (parametricPaths.length) {
@@ -200,9 +223,9 @@ const getMatch = (
 	}
 	const redirect = match[0]?.redirect || match[0]?.index?.redirect;
 	if (redirect) {
-		const newPath = getHref(redirect, match[0], match[1]);
-		history.replaceState({}, undefined, newPath);
-		match = getMatch(routes, newPath);
+		const newPath = getHref(redirect, match[0], match[1], origin);
+		history.replaceState({}, '', newPath);
+		match = getMatch(routes, newPath, origin);
 	}
 	if (match[1]) match[1].search = getSearchObject(search);
 	return match;
@@ -214,13 +237,13 @@ const getRouteContent = (router: RouterContext) => {
 		<${RouterContext.Provider} value=${router}>
 			${
 				route?.lazy
-					? route.fallback
+					? route?.fallback
 						? html`
-							<${Suspense} fallback=${route.fallback}>
-								<${route.lazy} />
+							<${Suspense} fallback=${route?.fallback}>
+								<${route?.lazy} />
 							</${Suspense}>
 						`
-						: html`<${route.lazy} />`
+						: html`<${route?.lazy} />`
 					: route?.element
 			}
 		</${RouterContext.Provider}>
@@ -238,35 +261,39 @@ interface RoutesProps extends WompoProps {
 }
 
 interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'> {
-	parent: RouteStructure;
-	element: RenderHtml;
-	path: string;
+	parent: RouteStructure | null;
+	element?: RenderHtml;
+	path?: string;
 	fullPath?: string;
 	children: RouteStructure[];
-	index: RouteStructure;
-	nextRoute?: RouteStructure;
-	fallback: RenderHtml;
-	lazy: LazyResult;
+	index: RouteStructure | null;
+	nextRoute?: RouteStructure | null;
+	fallback?: RenderHtml;
+	lazy: LazyResult | null;
+	notFound?: boolean;
 }
 
 interface RouterContext {
-	params: Params;
-	hash?: string;
-	currentRoute: string;
+	params: Params | null;
+	hash?: string | null;
+	currentRoute: string | null;
 	setNewRoute: (newValue: string, push?: boolean) => void;
 	routes: [string, RouteStructure][];
-	route: RouteStructure;
-	singleRoute: RouteStructure;
+	route: RouteStructure | null;
+	singleRoute: RouteStructure | null;
+	/** The normalized origin of the closest `Routes` ancestor (empty string when not set). */
+	origin: string;
 }
 const RouterContext = createContext<RouterContext>(
 	{
 		params: null,
 		hash: null,
 		currentRoute: null,
-		setNewRoute: null,
+		setNewRoute: () => {},
 		routes: [],
 		route: null,
 		singleRoute: null,
+		origin: '',
 	},
 	'wompo-route-context'
 );
@@ -288,7 +315,10 @@ const scrollIntoView = (hash: string) => {
  * It accepts the following props:
  * - notFoundElement: the component to render if the route current route is not found between the
  *   routes tree.
- * - origin: specifies the url location on where the routing starts (e.g. "/admin").
+ * - origin: specifies the url location on where the routing starts (e.g. "/admin"). When set, it is
+ *   prepended to every top-level route and to every absolute navigation target, so a link to
+ *   "/users" under origin "/admin" resolves to "/admin/users". Any falsy value (e.g. "", null,
+ *   undefined) disables this behavior entirely.
  *
  * Example:
  * ```javascript
@@ -305,36 +335,37 @@ const scrollIntoView = (hash: string) => {
  * }
  * ```
  */
-export function Routes({ origin, notFoundElement, children }: RoutesProps) {
+export function Routes({ origin: originProp, notFoundElement, children }: RoutesProps) {
+	const origin = normalizeOrigin(originProp);
 	const [currentRoute, setCurrentRoute] = useState(
 		window.location.pathname + window.location.search
 	);
 
 	const treeStructure = useMemo(() => {
-		const tree = buildTreeStructure(origin, children.nodes);
+		const tree = buildTreeStructure(origin, children?.nodes ?? []);
 		return tree;
 	}, []);
 
 	const routes: [string, RouteStructure][] = useMemo(() => getRoutes(treeStructure), []);
 	const hash = window.location.hash.split('#')[1];
-	const [route, params] = getMatch(routes, currentRoute);
+	const [route, params] = getMatch(routes, currentRoute, origin);
 
 	const setNewRoute = useCallback(
 		(newRoute: string, pushState: boolean = true) => {
 			setCurrentRoute((prevRoute) => {
-				const nextRoute = getHref(newRoute, route, params);
+				const nextRoute = getHref(newRoute, route, params, origin);
 				const [pathname, hash] = nextRoute.split('#');
 				if (pushState && prevRoute !== nextRoute) {
-					history.pushState({}, null, nextRoute);
+					history.pushState({}, '', nextRoute);
 				} else if (!pushState && prevRoute !== nextRoute) {
-					history.replaceState({}, null, nextRoute);
+					history.replaceState({}, '', nextRoute);
 				}
 				scrollIntoView(hash);
 				if (!nextRoute.startsWith('#')) return pathname;
 				return prevRoute;
 			});
 		},
-		[route, params]
+		[route, params, origin]
 	);
 
 	useEffect(() => {
@@ -365,6 +396,7 @@ export function Routes({ origin, notFoundElement, children }: RoutesProps) {
 				setNewRoute: setNewRoute,
 				routes: routes,
 				route: route,
+				origin: origin,
 			} as RouterContext),
 		[currentRoute]
 	);
@@ -384,7 +416,7 @@ export function Routes({ origin, notFoundElement, children }: RoutesProps) {
 			if (ogMeta) ogMeta.setAttribute('content', route.meta.description);
 		}
 	}
-	let nextRoute = null;
+	let nextRoute: RouteStructure | null = null;
 	root.nextRoute = nextRoute;
 	while (root.parent) {
 		nextRoute = root;
@@ -402,7 +434,7 @@ export function Routes({ origin, notFoundElement, children }: RoutesProps) {
 
 	return html`<${RouterContext.Provider} value=${context}>
 		${
-			(root as any).notFound
+			root.notFound
 				? notFoundElement ?? html`<div class="wompo-router-not-found">Not found!</div>`
 				: getRouteContent(nextRouteCtx)
 		}
@@ -500,7 +532,7 @@ CHILD-ROUTE
 export function ChildRoute() {
 	const router = useContext(RouterContext);
 	const route = router.singleRoute;
-	let toRender: RouteStructure = null;
+	let toRender: RouteStructure | null = null;
 	if (route) {
 		const newRoute = route.nextRoute;
 		if (newRoute) {
@@ -535,10 +567,17 @@ interface LinkProps extends WompoProps {
 	target?: string;
 }
 
-const getHref = (to: string, route: RouteStructure, params: Params) => {
+const getHref = (
+	to: string,
+	route: RouteStructure | null,
+	params: Params | null,
+	origin: string = ''
+) => {
 	let href = to;
 	if (!href.startsWith('/') && !href.startsWith('#') && route) {
-		let parentRoute = route;
+		// Relative links are resolved against the current route's chain of parents. The top-level
+		// parent already carries the origin in its path, so relative links inherit it for free.
+		let parentRoute: RouteStructure | null = route;
 		while (parentRoute) {
 			const parentPath = parentRoute.path;
 			if (parentPath) {
@@ -549,17 +588,23 @@ const getHref = (to: string, route: RouteStructure, params: Params) => {
 						.filter((p) => p.startsWith(':'))
 						.map((p) => p.substring(1))
 						.forEach((param) => {
-							parentRoutePath = parentRoutePath.replace(`:${param}`, params[param]);
+							parentRoutePath = parentRoutePath.replace(`:${param}`, params?.[param] ?? '');
 						});
 				}
 				if (parentRoutePath.includes('*')) {
-					parentRoutePath = parentRoutePath.replace('*', params.segments.join('/'));
+					parentRoutePath = parentRoutePath.replace('*', params?.segments?.join('/') ?? '');
 				}
 				const slash = !parentRoutePath.endsWith('/') && !href.startsWith('/') ? '/' : '';
 				href = parentRoutePath + slash + href;
 			}
 			parentRoute = parentRoute.parent;
 		}
+	} else if (origin && href.startsWith('/') && href !== origin && !href.startsWith(`${origin}/`)) {
+		// Absolute links are resolved relative to the origin (the router's mount point): a link to
+		// "/foo" under origin "/subapp" navigates to "/subapp/foo". The guards keep this idempotent —
+		// getHref runs both when building the <a href> and again on navigation, and the browser url
+		// already carries the origin, so an href that is already origin-prefixed is left untouched.
+		href = origin + href;
 	}
 	return href;
 };
@@ -572,15 +617,16 @@ const getHref = (to: string, route: RouteStructure, params: Params) => {
  * It accepts the following props:
  * - to: required. The url of the link. If the link doesn't start with a slash ("/"), it will be
  *   positioned in the current route (e.g.: if the current route is "/users" and the `to` prop is
- *   "20", the link will go to "/users/20", not "/20").
+ *   "20", the link will go to "/users/20", not "/20"). Absolute links (starting with "/") are
+ *   resolved against the `Routes` origin when one is set (e.g. "/users" becomes "/admin/users").
  * - target: the target of the link.
  */
 export function Link({ to, target, children }: LinkProps) {
 	const navigate = useNavigate();
-	const { singleRoute } = useContext(RouterContext);
+	const { singleRoute, origin } = useContext(RouterContext);
 	const routes = useRoutes();
 	const params = useParams();
-	const href = getHref(to, singleRoute, params);
+	const href = getHref(to, singleRoute, params, origin);
 	const onLinkClick = (ev: Event) => {
 		if (!target) {
 			ev.preventDefault();
@@ -588,7 +634,7 @@ export function Link({ to, target, children }: LinkProps) {
 		}
 	};
 	const preload = () => {
-		const [route] = getMatch(routes, href.split('#')[0]);
+		const [route] = getMatch(routes, href.split('#')[0], origin);
 		if (route && route.lazy) route.lazy();
 	};
 	return html`<a
@@ -623,7 +669,8 @@ NAV-LINK
  * It accepts the following props:
  * - to: required. The url of the link. If the link doesn't start with a slash ("/"), it will be
  *   positioned in the current route (e.g.: if the current route is "/users" and the `to` prop is
- *   "20", the link will go to "/users/20", not "/20").
+ *   "20", the link will go to "/users/20", not "/20"). Absolute links (starting with "/") are
+ *   resolved against the `Routes` origin when one is set (e.g. "/users" becomes "/admin/users").
  * - target: the target of the link.
  */
 export function NavLink({ to, target, children }: LinkProps) {
@@ -631,8 +678,8 @@ export function NavLink({ to, target, children }: LinkProps) {
 	const currentRoute = useCurrentRoute();
 	const params = useParams();
 	const routes = useRoutes();
-	const { singleRoute } = useContext(RouterContext);
-	const href = getHref(to, singleRoute, params);
+	const { singleRoute, origin } = useContext(RouterContext);
+	const href = getHref(to, singleRoute, params, origin);
 	const onLinkClick = (ev: Event) => {
 		if (!target) {
 			ev.preventDefault();
@@ -640,7 +687,7 @@ export function NavLink({ to, target, children }: LinkProps) {
 		}
 	};
 	const preload = () => {
-		const [route] = getMatch(routes, href.split('#')[0]);
+		const [route] = getMatch(routes, href.split('#')[0], origin);
 		if (route && route.lazy) route.lazy();
 	};
 	const isActive = currentRoute === href;

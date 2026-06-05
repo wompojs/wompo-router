@@ -11,15 +11,16 @@ interface RoutesProps extends WompoProps {
     origin?: string;
 }
 interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'> {
-    parent: RouteStructure;
-    element: RenderHtml;
-    path: string;
+    parent: RouteStructure | null;
+    element?: RenderHtml;
+    path?: string;
     fullPath?: string;
     children: RouteStructure[];
-    index: RouteStructure;
-    nextRoute?: RouteStructure;
-    fallback: RenderHtml;
-    lazy: LazyResult;
+    index: RouteStructure | null;
+    nextRoute?: RouteStructure | null;
+    fallback?: RenderHtml;
+    lazy: LazyResult | null;
+    notFound?: boolean;
 }
 /**
  * The main component to handle the client routing system.
@@ -31,7 +32,10 @@ interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'>
  * It accepts the following props:
  * - notFoundElement: the component to render if the route current route is not found between the
  *   routes tree.
- * - origin: specifies the url location on where the routing starts (e.g. "/admin").
+ * - origin: specifies the url location on where the routing starts (e.g. "/admin"). When set, it is
+ *   prepended to every top-level route and to every absolute navigation target, so a link to
+ *   "/users" under origin "/admin" resolves to "/admin/users". Any falsy value (e.g. "", null,
+ *   undefined) disables this behavior entirely.
  *
  * Example:
  * ```javascript
@@ -48,7 +52,7 @@ interface RouteStructure extends Omit<RouteProps, 'index' | 'children' | 'lazy'>
  * }
  * ```
  */
-export declare function Routes({ origin, notFoundElement, children }: RoutesProps): RenderHtml;
+export declare function Routes({ origin: originProp, notFoundElement, children }: RoutesProps): RenderHtml;
 interface RouteProps extends WompoProps {
     path?: string;
     index?: boolean;
@@ -127,7 +131,8 @@ interface LinkProps extends WompoProps {
  * It accepts the following props:
  * - to: required. The url of the link. If the link doesn't start with a slash ("/"), it will be
  *   positioned in the current route (e.g.: if the current route is "/users" and the `to` prop is
- *   "20", the link will go to "/users/20", not "/20").
+ *   "20", the link will go to "/users/20", not "/20"). Absolute links (starting with "/") are
+ *   resolved against the `Routes` origin when one is set (e.g. "/users" becomes "/admin/users").
  * - target: the target of the link.
  */
 export declare function Link({ to, target, children }: LinkProps): RenderHtml;
@@ -146,7 +151,8 @@ export declare namespace Link {
  * It accepts the following props:
  * - to: required. The url of the link. If the link doesn't start with a slash ("/"), it will be
  *   positioned in the current route (e.g.: if the current route is "/users" and the `to` prop is
- *   "20", the link will go to "/users/20", not "/20").
+ *   "20", the link will go to "/users/20", not "/20"). Absolute links (starting with "/") are
+ *   resolved against the `Routes` origin when one is set (e.g. "/users" becomes "/admin/users").
  * - target: the target of the link.
  */
 export declare function NavLink({ to, target, children }: LinkProps): RenderHtml;
@@ -158,7 +164,7 @@ export declare namespace NavLink {
  * Also, the components using this hook will automatically re-render whenver the current route
  * changes.
  */
-export declare const useParams: () => Params;
+export declare const useParams: () => Params | null;
 /**
  * This hook will return function that can be used to manually navigate through the routes.
  * The function accepts two parameters: the new route (which has the same behavior of the "to" prop
@@ -169,12 +175,12 @@ export declare const useNavigate: () => (newValue: string, push?: boolean) => vo
 /**
  * This hook will return the current path, and will re-render the component whenever it changes.
  */
-export declare const useCurrentRoute: () => string;
+export declare const useCurrentRoute: () => string | null;
 /**
  * This hook will return all the data of the current route, and will re-render the component
  * whenever the current route changes.
  */
-export declare const useRoute: () => RouteStructure;
+export declare const useRoute: () => RouteStructure | null;
 /**
  * This hook will return the whole routes object that the `Routes` component uses to render the
  * correct routes.

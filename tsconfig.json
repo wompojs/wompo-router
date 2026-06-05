@@ -1,16 +1,15 @@
 {
 	"compilerOptions": {
 		"outDir": "./dist/",
+		"rootDir": "./ts",
 		"noImplicitAny": true,
-		"module": "ES2020",
+		"module": "ESNext",
 		"lib": ["es2020", "dom"],
 		"target": "ES2021",
-		"jsx": "react-jsx",
-		"jsxImportSource": "wompo",
-		"moduleResolution": "node",
+		"moduleResolution": "bundler",
 		"declaration": true,
 		"emitDeclarationOnly": true,
-		"declarationDir": "./ts"
+		"declarationDir": "./dist"
 	},
 	"include": ["ts/wompo-router.ts"],
 	"exclude": ["dist"]
