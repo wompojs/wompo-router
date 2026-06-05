@@ -31,7 +31,7 @@
     "wompo": "^2.0.2"
   },
   "devDependencies": {
-    "esbuild": "0.20.1",
-    "ts-loader": "^9.4.3"
+    "esbuild": "^0.20.1",
+    "ts-loader": "^9.6.0"
   }
 }
